@@ -20,7 +20,7 @@ ZenTS 运行时只执行 **ES module（JS）**；TypeScript 是官方一等编�
 <UnityProject>/
   TsProject/
     package.json          # 仅 devDependencies：typescript、esbuild
-    tsconfig.json         # extends 包内 tsconfig.base.json
+    tsconfig.json         # extends Library/ZenTS/CoreLibs/types/tsconfig.base.json
     src/                  # 业务 TS（入库）
       main.ts
       game/logic.ts
@@ -29,15 +29,20 @@ ZenTS 运行时只执行 **ES module（JS）**；TypeScript 是官方一等编�
     out/                  # emit；默认 gitignore
       main.js
       main.js.map
+  Library/ZenTS/CoreLibs/ # Editor 从包暂存；tsc / IDE 用（gitignore）
+    types/
+    jslib/
   Assets/StreamingAssets/ZenTS/   # Player 构建拷贝；非 Editor 权威源
 ```
 
 | 路径 | 版本库 |
 |------|--------|
 | `TsProject/src/**`、`generated/**`、`package.json`、`tsconfig.json` | **入库** |
-| `TsProject/out/**`、`node_modules/` | **gitignore** |
+| `TsProject/out/**`、`node_modules/`、`Library/ZenTS/**` | **gitignore** |
 
 `.ts` **不要** 放进 `Assets/`（避免未知 importer）。
+
+git / PackageCache 安装时，磁盘上往往没有 `Packages/com.code-philosophy.zen-ts`；脚手架因此引用 **`Library/ZenTS/CoreLibs`**。打开工程或执行 Install / Init / Compile 时 Editor 会自动 Ensure 该目录。
 
 ## 分层
 

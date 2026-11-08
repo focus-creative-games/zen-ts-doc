@@ -2,286 +2,94 @@
 sidebar_position: 1
 title: "总览"
 ---
-:::note 文档站副本
-本页为语义契约的发布副本；请在上游 `ZenTSTest/Docs/spec` 修改后执行 `npm run sync-spec`。（源：`00-OVERVIEW.md`）
-:::
 
+> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
 
 # 00 — 总览
 
-> ZenTS 产品目标、双运行时架构、文档地图与初始化流程。
-> 术语见 [GLOSSARY.md](/docs/concepts/glossary/)。
+ZenTS 是 ZLua 的 JavaScript / TypeScript 移植。CLR 类型、成员绑定、重载、Marshal、生命周期和构建配置默认跟随 ZLua；只有 JavaScript 语言与宿主平台确有差异时才单独适配。
 
----
+**本文及各分册规定目标契约。当前 P0/P1 实现仍使用过渡 QuickJS 适配器；Native V8、完整 HostJs 与新语义尚待后续阶段交付。** 版本基线、实现状态与差异裁决见 [03-ALIGNMENT.md](./03-ALIGNMENT.md)。
 
 ## 1. 产品目标
 
 ### 1.1 使用方式
 
-ZenTS 在概念上对齐 P/Invoke、`MonoPInvokeCallback`、`MarshalAs`：
-
-| 概念 | ZenTS 对应 |
-|------|----------|
-| P/Invoke | C# ↔ JavaScript 互调；C#→JS 经 **`GetFunction<T>`** |
-| `MarshalAs` | **`[JsMarshalAs]`** — 参数 / 返回值 Marshal |
-| C# 调 JS | **`JsAppDomain.GetFunction<T>`** — 取得 Delegate 后 `Invoke` |
-
-**统一交互模型：**
-
-- **C#→JS**：`JsAppDomain.GetFunction<T>(module, exportName)` 按 ES 模块 specifier 与导出名绑定 Delegate；调用方 `Invoke`，热路径自行缓存。
-- **JS→C#**：类型 **懒注册**；首次取得类型对象时绑定成员（`CSharp[assembly][typeFullName]`，或等价的 `import { T } from "csharp:…"`，见 [02-TYPE-SYSTEM.md](./02-TYPE-SYSTEM.md) §2.11）。静态成员经类型对象，实例成员经实例 exotic object；方法调用 **`obj.Method(args)`**（无 Lua 冒号语法）。
-- **代码生成**：JS→C# 桥接在 Editor 生成（Mono：Expression Emit；Il2Cpp：C++ stub + 元数据），对业务开发者透明；**C#→JS 经 `GetFunction` + Delegate 桥**，不改写用户程序集。
-
-**深度集成：** 宿主启动时初始化 CLR 与 QuickJS（`JSRuntime` + 每域一个主 `JSContext`），加载 `zents` 标准库与 `CSharp` 根对象。
-
-**TypeScript：** 可选编辑期工作流（[14-TYPESCRIPT.md](./14-TYPESCRIPT.md)）。运行时 **只** 加载 emit 后的 ES module；canonical specifier **不含** `.js`。
+- C#→JS 的正式入口为 `JsAppDomain.GetFunction<T>(module, exportName)`；取得委托后自行缓存并调用。
+- JS→C# 经 `CSharp[assembly][typeFullName]` 懒绑定，推荐使用指向同一类型对象的 `csharp:` named import。
+- 静态调用 `Type.Method(...)`，实例调用 `obj.Method(...)`，构造 `new Type(...)`。提取的实例方法使用 `.call(receiver, ...)`，不自动捕获实例。
+- 不要求业务维护逐类型 Wrap 白名单；类型和成员必须仍有可用的 CLR 元数据、AOT 代码及桥接入口。懒绑定不等于不会裁剪或能运行任意未生成泛型。
+- TypeScript 是编辑期工具；运行时执行 emit 后的 JavaScript。
 
 ### 1.2 Player 发布优化（Il2Cpp）
 
-| 优化 | 说明 |
-|------|------|
-| Native 桥接 | 热路径为 C++，不经托管 P/Invoke 逐层跳转 |
-| Stub 复用 | 相同 ReducedType 签名复用桥接函数，非「每成员一个独立 C 函数」 |
-| 字段 / 属性 | Il2Cpp 可走偏移 + `methodPointer` 直接访问 |
-| 托管对象 | exotic object 内部槽记录对象指针；`ObjectRegistry` 槽位注册为 **GC root**，JS 侧释放句柄后解除 |
+CLR 元数据解析、绑定计划、重载与 Marshal 保持 C++ 热路径；同类签名可复用桥。首次绑定建立并缓存成员计划、可选默认值及闭合泛型信息。字段和含引用值类型的写回遵守 CLR GC/write barrier 规则。
 
-Mono（Editor）允许反射 / Emit 慢路径，但 **JS 可见语义必须与 Il2Cpp 一致**。
+Mono 使用反射与 Expression Emit，Il2Cpp 使用元数据和预编译桥；二者的 JS 可见行为必须一致。性能优化不得更改选中重载、声明门面或值类型复制语义。
 
-### 1.3 明确不支持
+### 1.3 明确边界
 
-| 项 | 规范行为 |
-|----|----------|
-| **Event 专用对象** | **无** `{ get, set, fire }`；脚本使用 `add_EventName` / `remove_EventName`（与普通方法相同） |
-| **属性 miss** | **`throw Error`**（`zents: member not found: {key}` 等） |
-| **只写属性读** | **`throw Error`**（`zents: property has no getter: …`） |
-| **实例继承运行时查找** | **无**；继承成员在 **Bind 期扁平化** 到当前类型三表（见 [02-TYPE-SYSTEM.md](./02-TYPE-SYSTEM.md) §5） |
-| **bigint 作为 CLR 整数** | v1 **不支持**；bigint 不得隐式映射为 `long` / `IntPtr` / enum 等 |
-| **ECMAScript Proxy 分派** | 规范 **不** 要求使用 `Proxy`；属性分派经 exotic object 内部槽实现 |
+| 项 | 契约 |
+|---|---|
+| Event | 使用 `add_Event` / `remove_Event`，没有独立 event 子对象 |
+| CLR 成员 miss | 抛带 `zents:` 前缀的 JS 错误；语言协议探测见类型系统 |
+| 继承 | 普通成员 Bind 期扁平化；全签名键另有受限的 miss 懒解析路径 |
+| 短名注册 | Bind 后冻结；不提供正式 `register_method` |
+| XML | 仅适用于 AOT 程序集；不支持 XML 热更新、运行时注册或 Reload |
+| 引擎 | 最终仅 Native V8 / HostJs；QuickJS 不作为长期后端 |
+| JS wrapper | 本规范的 exotic/内部槽是抽象模型，不要求 QuickJS 的 JSClassDef，也不限制为某种 Proxy 实现 |
 
 ### 1.4 `undefined` 与 `null`（概要）
 
-QuickJS 同时存在 `undefined` 与 `null`，与 Lua 仅 `nil` 不同。ZenTS 在边界上区分二者：
+`undefined` 表示缺失，`null` 表示显式空引用或 Nullable 无值；CLR null 推送为 JS null，void 返回 undefined。它们不能无差别合并。详细匹配及默认值规则见 [marshal/01-OVERVIEW.md](./marshal/01-OVERVIEW.md)。
 
-| JS 值 | 典型语义（v1 概要） |
-|-------|---------------------|
-| **`undefined`** | 形参缺失、对象属性不存在（**CLR 绑定 miss 除外**，miss 须 throw）、可选参数未传 |
-| **`null`** | CLR **引用类型 null**、`Nullable<T>` 无值、显式空引用 |
-| **两者均非** | 值类型零值（如 `0`、`false`）须用对应 JS 基元或 struct 构造 |
+## 2. CLR 宿主与引擎是两个维度
 
-完整 Push/Pop、可选参数、`out` 默认、数组空洞等规则见 **[marshal/index.md](/docs/spec/marshal/)**。**禁止**在规范层将 `undefined` 与 `null` 无差别等同为「空」。
-
----
-
-## 2. 双运行时架构
-
-```
-                    JsAppDomain.Initialize(moduleLoader)
-                                    │
-                    ┌───────────────┴───────────────┐
-                    ▼                               ▼
-            ZenTS.Mono (Editor)               ZenTS.Il2Cpp (Player)
-            JsMonoAppDomain                 JsIl2CppAppDomain
-                    │                               │
-        三表 exotic 分派 / Emit 桥          libil2cpp/zents (C++)
-                    │                               │
-                    └───────────────┬───────────────┘
-                                    ▼
-                         同一 JS 可见语义 (spec/**)
+```text
+JsAppDomain / IJsRuntime / zents / csharp:
+                    |
+           CLR 绑定计划与互操作规则
+             /                 \
+       Mono + Emit          Il2Cpp + C++
+             \                 /
+             ZenTS 自有引擎接口
+                /           \
+          Native V8       HostJs（JS ↔ WASM）
 ```
 
-| 层 | Mono | Il2Cpp |
-|----|------|--------|
-| 程序集 | `ZenTS.Mono` | `ZenTS.Il2Cpp`（薄 InternalCall 壳） |
-| 互操作实现 | C# + exotic 分派 | `libil2cpp/zents/**` |
-| 桥接 | 每 public 成员 Expression Emit | ReducedType stub + 生成元数据 |
-| 属性分派 | 三表 + exotic internal slots | native `Dispatch*` + `MetaBinding` / `TypeRegistry` |
-| 共享定义 | `ZenTS.Common`：`JsMarshalAsAttribute`、`JsAliasAttribute`、`JsAppDomain` | 同左 |
-| JS 引擎 | QuickJS：`JSRuntime` + 主 `JSContext` | 同左 |
+| 目标环境 | CLR 宿主 | 目标引擎 |
+|---|---|---|
+| Windows / macOS Editor | Mono | Native V8 |
+| Win64 / macOS / Android Player | Il2Cpp | Native V8 |
+| iOS Player | Il2Cpp | Native V8，JITless |
+| WebGL / 小游戏 | Il2Cpp/WASM | 平台已有 JS VM；不再内嵌 V8 |
 
-**Il2Cpp 源码布局（Unity 构建）：**
-
-- `libil2cpp/quickjs` — QuickJS 引擎源码（由包 Install 叠加）
-- `libil2cpp/zents` — ZenTS native 实现（来自包内 `ZenTS~/zents-runtime`）
-
-开发期可编辑参考：`build-win64/Il2CppOutputProject/IL2CPP/libil2cpp/zents`。
-
----
+这是目标支持矩阵，不是已验收平台清单。当前只验收 Windows Editor 与既有 Win64 导出工程上的 P1 过渡后端。V8 无可用实现的 Native 平台不回退 QuickJS；HostJs 平台也不借此承诺所有平台能力相同。
 
 ## 3. 文档地图
 
-```
-Docs/
-├── GLOSSARY.md                 术语表
-├── spec/
-│   ├── 00-OVERVIEW.md          ← 本文件
-│   ├── 01-HOST-API.md          JsAppDomain、GetFunction
-│   ├── 02-TYPE-SYSTEM.md       CSharp、`csharp:` import、类型对象、构造、数组
-│   ├── 04-METHOD-OVERLOAD.md   dispatch、别名、签名
-│   ├── 05-LIB.md               zents.* API
-│   ├── 10-LIFETIME.md          Registry、GC、异常边界
-│   ├── 11-MULTI-VERSION.md     Unity / QuickJS Install、Define
-│   ├── 12-MIGRATION-ADAPTORS.md  Puerts 等类型路径适配
-│   ├── 13-EXTENSION-METHODS.md C# Extension 方法
-│   ├── 14-TYPESCRIPT.md        TypeScript 工程、声明生成、emit
-│   ├── build/                  QuickJS 构建、Mono gate、调试、原生模块
-│   │   ├── 01-QUICKJS.md
-│   │   ├── 03-MONO-CALLBACK-GATE.md
-│   │   ├── 04-JS-DEBUGGER.md
-│   │   └── 05-NATIVE-MODULES.md
-│   ├── metatable/              属性分派、三表、exotic 布局
-│   └── marshal/                Push/Pop、[JsMarshalAs]
-├── impl/                       实现说明（不改变 JS 语义）
-└── guides/                     测试、迁移
-```
-
-**阅读顺序建议：**
-
-1. 本文件 → [01-HOST-API.md](./01-HOST-API.md)（宿主集成）
-2. [02-TYPE-SYSTEM.md](./02-TYPE-SYSTEM.md) + [metatable/index.md](/docs/spec/metatable/)（JS 如何访问 C#；推荐 `csharp:` import）
-3. [marshal/index.md](/docs/spec/marshal/)（参数如何传递）
-4. [04-METHOD-OVERLOAD.md](./04-METHOD-OVERLOAD.md) + [05-LIB.md](./05-LIB.md)（重载与标准库）
-5. [10-LIFETIME.md](./10-LIFETIME.md)（内存与 GC）
-6. [11-MULTI-VERSION.md](./11-MULTI-VERSION.md) + [build/01-QUICKJS.md](./build/01-QUICKJS.md)（Install 与引擎构建）
-7. 自 Puerts 等迁移 → [12-MIGRATION-ADAPTORS.md](./12-MIGRATION-ADAPTORS.md)；Extension → [13-EXTENSION-METHODS.md](./13-EXTENSION-METHODS.md)
-8. 用 TypeScript 写业务 → [14-TYPESCRIPT.md](./14-TYPESCRIPT.md)（**不**改变 JS 语义）
-
-**冲突裁决：** `spec/**` > Il2Cpp 源码 > `impl/**`。[14-TYPESCRIPT.md](./14-TYPESCRIPT.md) 约束编辑期工作流，**不**覆盖 JS 互操作语义。
-
----
+| 文件 | 职责 |
+|---|---|
+| [01-HOST-API.md](./01-HOST-API.md) | 初始化、Reset、GetFunction、异常 |
+| [02-TYPE-SYSTEM.md](./02-TYPE-SYSTEM.md) | 类型、门面、构造、继承 |
+| [03-ALIGNMENT.md](./03-ALIGNMENT.md) | ZLua 基线、JS 差异、实现状态及裁决 |
+| [04-METHOD-OVERLOAD.md](./04-METHOD-OVERLOAD.md) | 懒签名、GTAP、params、选优 |
+| [05-LIB.md](./05-LIB.md) | zents API、inflate 与类型实参 |
+| [marshal](./marshal/index.md) / [成员分派](./metatable/index.md) | 双向值转换及成员模型 |
+| [10-LIFETIME.md](./10-LIFETIME.md) | GC、作用域、线程及 Reset |
+| [11-MULTI-VERSION.md](./11-MULTI-VERSION.md) | 安装、版本、构建与增量迭代 |
+| [12-MIGRATION-ADAPTORS.md](./12-MIGRATION-ADAPTORS.md) | 历史 API 迁移 |
+| [13-EXTENSION-METHODS.md](./13-EXTENSION-METHODS.md) | 扩展方法配置与竞争 |
+| [14-TYPESCRIPT.md](./14-TYPESCRIPT.md) | emit、声明、模块和打包 |
+| [15-SETTINGS.md](./15-SETTINGS.md) / [16-UNITY-OPTIMIZATIONS.md](./16-UNITY-OPTIMIZATIONS.md) | 配置与 Unity API 优化 |
+| [V8](./build/02-V8.md) / [引擎边界](./build/07-ENGINE-BOUNDARY.md) / [HostJs](./build/06-HOSTJS.md) | 引擎集成 |
 
 ## 4. 初始化流程
 
-### 4.1 C# 入口
+1. 按环境创建 CLR 宿主与对应引擎适配器，建立域 generation。
+2. 安装模块解析、内置库、类型根对象和必要的 AOT 配置表。
+3. 首次访问类型时建立绑定计划及引擎对象；短名冻结，全签名键按需缓存。
+4. `GetFunction` 加载就绪模块并生成委托；Promise 不会被同步委托自动等待。
+5. 帧泵处理待释放引用；预约的 Reset 在 EndOfFrame 生效，旧委托及句柄失效。
 
-```csharp
-JsAppDomain.Initialize(moduleName => {
-    // 返回 ES module 源码 string，或 byte[] 等 loader 约定类型
-    return LoadJsModule(moduleName);
-});
-```
-
-`JsAppDomain` 按 `Application.isEditor` 解析后端：
-
-- Editor → `ZenTS.JsMonoAppDomain.Initialize`
-- Player → `ZenTS.JsIl2CppAppDomain.Initialize` → native `InitializeInternal`
-
-初始化完成后注册 `JsFramePump`，在 Unity 帧回调中处理 pending ref 释放等 housekeeping。
-
-### 4.2 Native / Mono 侧（概念顺序）
-
-| 步骤 | 动作 |
-|------|------|
-| 1 | 创建 `JSRuntime` 与域内主 `JSContext`（**单上下文**模型，见 [10-LIFETIME.md](./10-LIFETIME.md)） |
-| 2 | 注册 `zents` 标准库与内部 hook（`ZenTSLib::RegisterGlobals`） |
-| 3 | 初始化 Registry：`ObjectRegistry`、`TypeRegistry`、Opaque scope 等 |
-| 4 | 创建全局 `CSharp` 根对象（程序集 / 类型懒加载属性分派） |
-| 5 | 安装 ES module loader（`import()` / 静态 `import` 解析；**先** 拦截 `csharp:` 虚拟模块，见 [02-TYPE-SYSTEM.md](./02-TYPE-SYSTEM.md) §2.11） |
-| 6 | 可选：执行 `globals.js` 等项目脚本 |
-
-### 4.3 首次类型访问
-
-```
-import { T } from "csharp:{assembly}/{namespace}"
-  → loader 拦截 csharp: → 合成模块 named export
-  → 读取 export T 时解析为 CSharp[assembly][typeFullName]（同一对象）
-
-CSharp[assemblyName]  （属性 miss → 懒创建程序集对象并缓存）
-
-assembly[typeFullName]  （属性 miss → CLR 解析 Type，EnsureBinding）
-  → 构建 STO / IEO、三表、dispatch
-  → 返回类型对象并缓存
-```
-
-之后 JS 侧通过类型对象 / 实例 exotic object 访问成员，**无需**手动 Export 或 Callback 标记。
-
-### 4.4 整域 Reset / 关闭
-
-宿主公开 API **无** `Shutdown`；热更或清空脚本世界用 `JsAppDomain.Reset(loader)`（调用当下仅预约，本帧 **EndOfFrame** 才真正 teardown + 按 Initialize 路径重建）。内部 teardown 顺序概念上为：
-
-1. 排空 pending JS ref 释放队列
-2. `ObjectRegistry::Shutdown`、Struct registry shutdown
-3. 释放主 `JSContext` / `JSRuntime`（随后重建并安装新 loader）
-
-旧 `GetFunction` 委托在 Reset 生效后一律作废。
-
----
-
-## 5. 与其它文档的边界
-
-| 主题 | 所在文档 |
-|------|----------|
-| 属性分派 / 三表 / miss 语义 | [metatable/](/docs/spec/metatable/) |
-| Push / Pop / ref / Opaque | [marshal/](/docs/spec/marshal/) |
-| `zents.make_*` / `register_method` | [05-LIB.md](./05-LIB.md) |
-| `GetFunction` 与 Delegate 桥 | [01-HOST-API.md](./01-HOST-API.md) |
-| `csharp:` 类型模块 | [02-TYPE-SYSTEM.md](./02-TYPE-SYSTEM.md) §2.11 |
-| ObjectRegistry / GC root | [10-LIFETIME.md](./10-LIFETIME.md) |
-| `undefined` / `null` 完整规则 | [marshal/](/docs/spec/marshal/) |
-| Unity Install / QuickJS pin | [11-MULTI-VERSION.md](./11-MULTI-VERSION.md) |
-| Editor Mono `JS_Throw` gate | [build/03-MONO-CALLBACK-GATE.md](./build/03-MONO-CALLBACK-GATE.md) |
-| Puerts 类型路径迁移 | [12-MIGRATION-ADAPTORS.md](./12-MIGRATION-ADAPTORS.md) |
-| TypeScript 工作流 | [14-TYPESCRIPT.md](./14-TYPESCRIPT.md) |
-
----
-
-## 6. 示例：最小脚本
-
-```javascript
-import { Demo } from "csharp:Assembly-CSharp";
-
-const demo = new Demo();
-demo.setX(10);
-console.log(demo.getX());
-
-// 显式重载（见 04-METHOD-OVERLOAD）
-demo['Run(System.Int32)'](42);          // 全签名键
-const run = demo['Run(System.Int32)'];
-zents.register_method("run_i32", run);    // 短名后可 obj.run_i32(42)
-demo.run_i32(42);
-
-// Event：无专用对象
-demo.add_ValueChanged((v) => console.log(v));
-demo.remove_ValueChanged(handler);
-```
-
-低层等价（全局 `CSharp`）：
-
-```javascript
-CSharp.AC = CSharp['Assembly-CSharp'];
-const Demo = CSharp.AC.Demo;
-const demo = new Demo();
-```
-
-C# 侧：
-
-```csharp
-var onStart = JsAppDomain.GetFunction<Action>("main", "OnStart");
-onStart();
-
-public event Action<int> ValueChanged;
-// JS: demo.add_ValueChanged((v) => { ... });
-//     demo.remove_ValueChanged(handler);
-```
-
-**方法 this 绑定：**
-
-```javascript
-demo.setX(1);              // ✅ 作为方法调用，自动传入 CLR this
-const fn = demo.setX;
-fn(1);                     // ❌ 提取的函数不自动绑定 this；行为未定义或抛错（实现须一致且可诊断）
-```
-
----
-
-## 7. 与 ZLua 的对照（迁移提示）
-
-| ZLua | ZenTS |
-|------|-----|
-| `LuaAppDomain` | `JsAppDomain` |
-| `zlua` | `zents` |
-| `[LuaMarshalAs]` / `[LuaAlias]` | `[JsMarshalAs]` / `[JsAlias]` |
-| `require` + 表导出 | ES `import` / `export`；CLR 类型用 **`import { T } from "csharp:…"`**；`GetFunction` 按模块 namespace |
-| `obj:Method()` | `obj.Method()` |
-| userdata + metatable | exotic object + internal slots |
-| `__index` miss → `error` | 属性 miss → `throw Error('zents: …')` |
-| Lua `nil` | 区分 `null` 与 `undefined`（见 §1.4） |
+HostJs 必须在同步绑定前完成所需 bundle/分包的预加载；Reset 只重建 ZenTS 管理的脚本世界，不销毁浏览器或小游戏宿主 VM。

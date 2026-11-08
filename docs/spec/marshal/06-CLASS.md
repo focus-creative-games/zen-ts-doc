@@ -2,11 +2,8 @@
 sidebar_position: 12
 title: "Class / Interface Marshal"
 ---
-:::note 文档站副本
-本页为语义契约的发布副本；请在上游 `ZenTSTest/Docs/spec` 修改后执行 `npm run sync-spec`。（源：`marshal\06-CLASS.md`）
-:::
 
-
+> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
 # Class / Interface Marshal
 
 > **规范性：** 引用类型（`class`、`interface`、`string`、数组实例、delegate 实例等）在 JavaScript 与 C# 之间的默认 Marshal 规则。
@@ -28,7 +25,7 @@ title: "Class / Interface Marshal"
 | **数组** | ByObj exotic | [07-ARRAY.md](./07-ARRAY.md) |
 | **Delegate** | function 或 Delegate exotic | [09-FUNCTION.md](./09-FUNCTION.md) |
 
-ByObj exotic 为 QuickJS **exotic object** + **IEO 三表**；与 OpaqueValue、Pointer 不同。
+ByObj exotic 为引擎无关 CLR wrapper + IEO 三表；与 OpaqueValue、Pointer 不同。
 
 ---
 
@@ -37,11 +34,11 @@ ByObj exotic 为 QuickJS **exotic object** + **IEO 三表**；与 OpaqueValue、
 | 概念 | 含义 |
 |------|------|
 | **Identity** | exotic 载荷的托管对象引用（运行时实际实例） |
-| **View / 门面** | **IEO** 与成员可见性；**唯一来源 = 本次 Marshal 的声明类型** |
+| **View / 门面** | **IEO** 与成员可见性；默认来源为本次 Marshal 的声明类型；显式返回值 ActualTypeUserData 是例外 |
 
 ### 2.1 规则
 
-1. **C# → JS**：按 **声明类型** 选 IEO；**不**因运行时类型改挂或改走特殊 Marshal。
+1. **C# → JS**：按 **声明类型** 选 IEO；不自动因运行时类型改变；合法返回值 ActualTypeUserData 按下述例外处理。
 2. **虚方法**：查找用声明类型 `MethodInfo`；调用对真实 `this` **虚派发**。
 3. **非虚 / `new` 隐藏**：走声明类型槽位。
 4. **Downcast**：仅 `zents.cast(obj, targetType)`；返回 **新 exotic**（同 identity、新门面）。
@@ -66,7 +63,7 @@ const c = zents.cast(o, Child);             // 门面 Child（须 IsAssignableFr
 | Pop | 接受 boolean / number / string / exotic 等 |
 | 运行时 `string` | 仍为 Object exotic，**不是** JS string |
 
-`Nullable<T>`（T 引用类型）：`null` ↔ **`null`**；有值同 class 规则。
+C# nullable 引用注解不改变 CLR 引用类型；null 仍为 null。System.Nullable\<T\> 的 T 只能是合法值类型。
 
 ---
 
@@ -82,12 +79,12 @@ const c = zents.cast(o, Child);             // 门面 Child（须 IsAssignableFr
 |----|------|
 | 默认 | **ByObj exotic**；门面 = **接口类型** |
 | `null` | ↔ **`null`** |
-| `[JsMarshalAs]` | `Object`、`OpaqueValue`（C#→JS） |
+| `[JsMarshalAs]` | Object、OpaqueValue（C#→JS）、返回值 ActualTypeUserData |
 | 成员 | 仅接口 + 继承接口可见成员 |
 
 ---
 
-## 5. `ref` / `out` / `in` 引用类型（JS → C#）
+## 5. ref/in 与 out 引用类型（JS→C#）
 
 见 [03-BYREF.md](./03-BYREF.md)。
 
@@ -160,3 +157,12 @@ Push/Pop、`(identity, viewType)`、`zents.cast`、C#→JS byref Opaque、错误
 | [09-FUNCTION.md](./09-FUNCTION.md) | Delegate |
 | [../metatable/](/docs/spec/metatable/) | 三表分派 |
 | [../05-LIB.md](../05-LIB.md) | cast、box |
+
+
+## 10. ActualTypeUserData 返回值
+
+仅当声明返回类型默认为 ByObj 引用类型，显式标注后用实际 CLR 类型作为门面，仍保持对象身份。实际值为 string 也输出 System.String wrapper，不变成 JS string；null 仍为 null。声明返回类型是 string 时不允许此策略。
+
+此策略不适用于参数、字段、属性或类型级。接口/基类返回仍默认声明门面，不能把优化策略悄悄变成所有返回值默认。
+
+JS→CLR out 引用类型没有输入槽，按元素策略加入结果元组；ref/in 的临时重新绑定仍不改 JS 变量。object 不凭 bigint 猜测 long/ulong，BigInt 标注不适用于 object 或引用类型。

@@ -32,7 +32,7 @@ ZenTS 在概念上对齐 P/Invoke、`MonoPInvokeCallback`、`MarshalAs`：
 - **JS→C#**：类型 **懒注册**；首次取得类型对象时绑定成员（`CSharp[assembly][typeFullName]`，或等价的 `import { T } from "csharp:…"`，见 [02-TYPE-SYSTEM.md](./02-TYPE-SYSTEM.md) §2.11）。静态成员经类型对象，实例成员经实例 exotic object；方法调用 **`obj.Method(args)`**（无 Lua 冒号语法）。
 - **代码生成**：JS→C# 桥接在 Editor 生成（Mono：Expression Emit；Il2Cpp：C++ stub + 元数据），对业务开发者透明；**C#→JS 经 `GetFunction` + Delegate 桥**，不改写用户程序集。
 
-**深度集成：** 宿主启动时初始化 CLR 与 QuickJS（`JSRuntime` + 每域一个主 `JSContext`），加载 `zents` 标准库与 `CSharp` 根对象。
+**深度集成：** 宿主启动时初始化 CLR 与脚本引擎，加载 `zents` 标准库与 `CSharp` 根对象。Editor 与非 WebGL Player 的引擎是 QuickJS（`JSRuntime` + 每域一个主 `JSContext`）。WebGL Player 使用宿主 JS，见 [06-HOSTJS.md](./build/06-HOSTJS.md)。
 
 **TypeScript：** 可选编辑期工作流（[14-TYPESCRIPT.md](./14-TYPESCRIPT.md)）。运行时 **只** 加载 emit 后的 ES module；canonical specifier **不含** `.js`。
 
@@ -96,11 +96,11 @@ QuickJS 同时存在 `undefined` 与 `null`，与 Lua 仅 `nil` 不同。ZenTS �
 | 桥接 | 每 public 成员 Expression Emit | ReducedType stub + 生成元数据 |
 | 属性分派 | 三表 + exotic internal slots | native `Dispatch*` + `MetaBinding` / `TypeRegistry` |
 | 共享定义 | `ZenTS.Common`：`JsMarshalAsAttribute`、`JsAliasAttribute`、`JsAppDomain` | 同左 |
-| JS 引擎 | QuickJS：`JSRuntime` + 主 `JSContext` | 同左 |
+| JS 引擎 | QuickJS：`JSRuntime` + 主 `JSContext` | 非 WebGL：QuickJS。WebGL Player：宿主 JS（[06-HOSTJS.md](./build/06-HOSTJS.md)） |
 
 **Il2Cpp 源码布局（Unity 构建）：**
 
-- `libil2cpp/quickjs` — QuickJS 引擎源码（由包 Install 叠加）
+- `libil2cpp/quickjs` — 非 HostJs 目标的 QuickJS 源码（由包 Install 叠加）。WebGL Install 不创建该目录
 - `libil2cpp/zents` — ZenTS native 实现（来自包内 `ZenTS~/zents-runtime`）
 
 开发期可编辑参考：`build-win64/Il2CppOutputProject/IL2CPP/libil2cpp/zents`。
@@ -125,6 +125,7 @@ Docs/
 │   ├── 14-TYPESCRIPT.md        TypeScript 工程、声明生成、emit
 │   ├── build/                  QuickJS 构建、Mono gate、调试、原生模块
 │   │   ├── 01-QUICKJS.md
+│   │   ├── 06-HOSTJS.md          WebGL 宿主 JS 引擎
 │   │   ├── 03-MONO-CALLBACK-GATE.md
 │   │   ├── 04-JS-DEBUGGER.md
 │   │   └── 05-NATIVE-MODULES.md

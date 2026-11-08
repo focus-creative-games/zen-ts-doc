@@ -16,6 +16,7 @@ ZenTS 维护 **一份** JS 可见语义契约（`spec/**`），两套实现：
 |------|---------------|----------|
 | **Unity Editor** | `ZenTS.Mono` | Expression Tree / Emit + Exotic 分派 |
 | **Il2Cpp Player** | `ZenTS.Il2Cpp` + `libil2cpp/zents`（包内 `ZenTS~/zents-runtime`） | C++ MethodBridge + ReducedType stub |
+| **WebGL Player** | 同上，脚本引擎换成 HostJs | 同一套 C++ MethodBridge；业务脚本在页面 JS 引擎 |
 
 公共门面与特性在 `ZenTS.Common`：`JsAppDomain`、`[JsMarshalAs]`、`[JsAlias]`、`[JsExtension]` 等。
 
@@ -41,7 +42,7 @@ flowchart LR
 
 | 角色 | 说明 |
 |------|------|
-| **Player（Il2Cpp）** | 发版与性能权威：内嵌 QuickJS、C++ 直桥、签名 stub 复用（需 Generate） |
+| **Player（Il2Cpp）** | 发版与性能权威：非 WebGL 内嵌 QuickJS；WebGL 用宿主 JS（[06-HOSTJS](/docs/spec/build/06-HOSTJS/)）。两边都是 C++ 直桥、签名 stub 复用（需 Generate） |
 | **Editor（Mono）** | 快速迭代：反射 + Emit；目录与语义对齐 Il2Cpp |
 
 **契约：** Mono 允许更慢的实现路径，但脚本可观察行为（调用结果、异常、Marshal、miss）**必须与 Il2Cpp 一致**。
@@ -65,7 +66,7 @@ flowchart LR
 
 | 路径 | 内容 |
 |------|------|
-| `libil2cpp/quickjs` | QuickJS 引擎源码（Install 叠加） |
+| `libil2cpp/quickjs` | 非 HostJs 目标的 QuickJS 源码（Install 叠加）。WebGL 不创建该目录 |
 | `libil2cpp/zents` | ZenTS native（来自包内 `ZenTS~/zents-runtime`） |
 
 开发期可编辑参考常见于：`build-win64/.../libil2cpp/zents`。

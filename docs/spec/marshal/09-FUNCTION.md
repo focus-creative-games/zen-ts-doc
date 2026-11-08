@@ -2,11 +2,8 @@
 sidebar_position: 15
 title: "Delegate / 函数 Marshal"
 ---
-:::note 文档站副本
-本页为语义契约的发布副本；请在上游 `ZenTSTest/Docs/spec` 修改后执行 `npm run sync-spec`。（源：`marshal\09-FUNCTION.md`）
-:::
 
-
+> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
 # Delegate / 函数 Marshal
 
 > **规范性：** C# `Delegate` 与 JavaScript function 之间的双向 Marshal。
@@ -143,7 +140,7 @@ obj.RegisterCallback((v) => console.log(v));
 |---------|-------------|
 | `function` | `JsDelegateBinder.Create(...)` |
 | **`null`** | **`null`** |
-| **`undefined`** | 必选 → **throw**；可空 delegate → **`null`**（与 [01-OVERVIEW.md](./01-OVERVIEW.md) §2 一致） |
+| **`undefined`** | 必选 → throw；Nullable 引用注解不使 undefined 自动变为 null，optional 则采用 CLR 默认值（与 [01-OVERVIEW.md](./01-OVERVIEW.md) §2 一致） |
 | Delegate exotic | 直接传递 |
 | 其它 | **throw** |
 
@@ -156,7 +153,7 @@ obj.RegisterCallback((v) => console.log(v));
 
 ### 4.3 Il2Cpp：`DelegateBridges`
 
-按每种 `Invoke` 签名生成 C++ 入口：`JS_Call` + marshal。
+按每种 `Invoke` 签名生成 C++ 入口：自有引擎 Call + marshal。
 
 - **`ref`/`out`/`in`（bridge C#→JS）**：默认 **OpaqueValue**
 - **`[JsMarshalAs]`** 非默认：与普通方法同一解析
@@ -186,7 +183,7 @@ obj.RegisterCallback(d);
 |--|-----------------------------------|------------------------------|
 | 方向 | **C# → JS** | **C# → JS** |
 | 绑定 | `import` 模块 + 命名导出 + marshal 为 `T` | 隐式 marshal / `to_delegate` |
-| 调用 | `T.Invoke` → **`JS_Call` / `JS_Eval`** | 同左 |
+| 调用 | `T.Invoke` → 自有引擎 Call 接口 | 同左 |
 | **`ref`/`out`/`in`（C#→JS）** | 默认 **OpaqueValue** | 同左 |
 | **`params`** | **不支持** | **不支持** |
 | 缓存 | **调用方负责** | 持有方决定 |
@@ -261,3 +258,12 @@ System.Int32(System.Int32)      → Func<int,int>
 | [../01-HOST-API.md](../01-HOST-API.md) | GetFunction |
 | [../05-LIB.md](../05-LIB.md) | to_delegate |
 | [../10-LIFETIME.md](../10-LIFETIME.md) | ref 释放 |
+
+
+## 11. 目标后端与方向裁决
+
+Mono 的引擎调用、值与 callback/error 服务来自同一个 backend；持久函数引用与 identity 不依赖 QuickJS payload 或移动 GC 裸地址。Il2Cpp 的委托桥按实际平台 ABI 验收，不能把 Win64 trampoline 当成 ARM64/WASM 的完整支持。
+
+JS 调普通 CLR delegate Invoke 时适用 JS→CLR out 零输入/结果元组；C# 调 JS delegate/GetFunction 时 ref/in/out 仍为当前调用有效的 Opaque，不从 JS return tuple 写回。默认 Int64/UInt64 使用 number，签名槽显式 BigInt 才用 bigint；C#→JS byref 的 BigInt 标注是 Opaque 元素策略。
+
+同步 delegate 不自动 await Promise。Reset 使旧 generation delegate 失效，事件 add/remove 必须保持同一 CLR delegate 身份。

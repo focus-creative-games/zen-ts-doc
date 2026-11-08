@@ -2,11 +2,8 @@
 sidebar_position: 16
 title: "指针与不支持类型"
 ---
-:::note 文档站副本
-本页为语义契约的发布副本；请在上游 `ZenTSTest/Docs/spec` 修改后执行 `npm run sync-spec`。（源：`marshal\10-POINTER.md`）
-:::
 
-
+> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
 # 指针与不支持类型
 
 > **规范性：** 非托管指针、函数指针、以及 v1 默认不支持或受限的 CLR 形态之 Marshal 规则。
@@ -109,9 +106,9 @@ title: "指针与不支持类型"
 
 编译期按 **`object`**。
 
-### 5.5 `bigint`（JS）
+### 5.5 bigint（JS）
 
-**禁止**作为 CLR 整型 / enum / `IntPtr` 通道 → **`throw Error('zents: …')`**（[../00-OVERVIEW.md](../00-OVERVIEW.md) §1.3）。
+只允许显式 JsMarshalType.BigInt 的 Int64/UInt64 槽及合法 byref 元素使用 bigint。Default 整数、enum、IntPtr/UIntPtr 和 Pointer token 不自动接受 bigint；不能把 bigint 当原生地址或调用函数指针。
 
 ### 5.6 开放泛型形参
 
@@ -136,7 +133,7 @@ title: "指针与不支持类型"
 |----|------|
 | 接受 | **仅** Pointer handle |
 | **不** 接受 | `number`、`bigint`、ByObj/ByVal exotic、OpaqueValue **隐式互转** |
-| **`null` 指针** | C#→JS：两平台一致（Pointer 或 **`null`**，实现须文档化） |
+| **`null` 指针** | C#→JS：两平台一致（null 指针统一为 JS null） |
 | 不匹配 | **`throw Error`** |
 
 ---

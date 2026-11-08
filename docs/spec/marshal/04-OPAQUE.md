@@ -2,11 +2,8 @@
 sidebar_position: 10
 title: "OpaqueValue（临时不透明参数）"
 ---
-:::note 文档站副本
-本页为语义契约的发布副本；请在上游 `ZenTSTest/Docs/spec` 修改后执行 `npm run sync-spec`。（源：`marshal\04-OPAQUE.md`）
-:::
 
-
+> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
 # OpaqueValue（临时不透明参数）
 
 > **规范性：** C# 调用 JavaScript 时，将形参/局部在 C# 调用栈上的存储地址暴露给脚本的临时令牌；以及 `[JsMarshalAs(OpaqueValue)]` 强制路径。
@@ -50,7 +47,7 @@ OpaqueValue 是 **C# 调用 JavaScript** 时，将 **形参/局部在 C# 调用�
 | **C# → JS** | **`ref`/`in`/`out T`** 默认 Push OpaqueValue |
 | **非 byref** | 默认 [01-OVERVIEW.md](./01-OVERVIEW.md)；允许时标注强制 Opaque |
 
-Lua 回调中的 `ref int` **不是** `number`，而是 opaque handle；再传给 `ref int` C# 形参可 **原样** 传回（§6 byref 规则）。
+JS 回调中的 `ref int` **不是** `number`，而是 opaque handle；再传给 `ref int` C# 形参可 **原样** 传回（§6 byref 规则）。
 
 ---
 
@@ -117,7 +114,7 @@ handle **仍有效** 的同步链内：
 | **托管引用类型**（class、string、delegate、数组、boxed 等） | **是** | 可 **原样** 传入 handle |
 | **`struct`（普通值类型）** | **是** | 同上 |
 | **简单类型**（bool、整型、float、enum、`IntPtr` 等） | **否** | 须 `zents.get_opaquevalue(h)` 后再传 |
-| **`ref`/`in`/`out A`** | **一律** 先识别 Opaque；兼容则 **直传地址**（含 `ref int`） | 见 [03-BYREF.md](./03-BYREF.md) |
+| **`ref`/`in A`** | 先识别 Opaque；精确兼容且读写性合法则直传地址（含 ref int）；out 在 JS→CLR 不占输入 | 见 [03-BYREF.md](./03-BYREF.md) |
 
 ```javascript
 function OnOpaquePoint(h) {
@@ -162,3 +159,10 @@ struct 默认 C#→JS by-val 在同步链内亦可能为 OpaqueValue。须 `get`
 | struct | [05-STRUCT.md](./05-STRUCT.md) |
 | `zents.*` | [../05-LIB.md](../05-LIB.md) |
 | 帧泵 / scope | [../10-LIFETIME.md](../10-LIFETIME.md) |
+
+
+## 10. 元素策略与方向裁决
+
+默认元素转换仍使用 Default，Int64/UInt64 因而为 number；若该合法元素槽显式标注 BigInt，get/set 使用 bigint 并作完整范围校验。不得为一个默认 Opaque 自动启用 BigInt。in 登记为只读，set 或传给可写 ref 都必须失败。
+
+本页关于 out Opaque 只适用于 C#→JS。JS→CLR 的 out 没有输入，占位传 Opaque/ByVal 不是新契约；结果按 [byref 分册](./03-BYREF.md) 返回元组。复制 API 不延长借用地址或赋予 ref struct 长期存活能力。

@@ -2,11 +2,8 @@
 sidebar_position: 13
 title: "数组 Marshal"
 ---
-:::note 文档站副本
-本页为语义契约的发布副本；请在上游 `ZenTSTest/Docs/spec` 修改后执行 `npm run sync-spec`。（源：`marshal\07-ARRAY.md`）
-:::
 
-
+> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
 # 数组 Marshal
 
 > **规范性：** szarray、mdarray 及 `byte[]` 在 JavaScript 与 C# 之间的 Marshal 规则。
@@ -104,21 +101,13 @@ CS.Demo.Process(null);
 
 ---
 
-## 7. `params T[]` 形参
+## 7. params T[]
 
-与 szarray **相同** Marshal；差异在传参形态（[02-MARSHAL-AS.md §7](./02-MARSHAL-AS.md)）：
+固定前缀后，省略为 T[0]；0～N 个实参按元素 T 展开，或单个可赋值的 CLR T[] wrapper 整段传入。JS Array/TypedArray 不自动作为整个 params 数组；使用 spread 显式展开。若元素类型 T 自身允许这种形态，它可作为一个元素。
 
-| 传入 | C# 收到 |
-|------|---------|
-| ByObj exotic | 数组引用 |
-| `[]` | **`T[0]`** |
-| `[ … ]` | **`T[n]`** |
-| **`null`** | **`null`** |
-| **`undefined`** | **throw**（**非** 空数组） |
+null 仅作为可能的元素参与匹配，不表示整个 null 数组；undefined 仍按元素/缺失规则处理。普通非 params 的 T[] 参数继续接受连续 JS Array 或 null，两者不能混淆。
 
-**不支持** 多实参隐式收集：`Sum(1, 2, 3)` **非法**。
-
-**GetFunction delegate bridge** 上的 `params` **不支持**（[09-FUNCTION.md](./09-FUNCTION.md)）。
+GetFunction/delegate bridge 的 params 展开不支持。完整优先级见 [重载](../04-METHOD-OVERLOAD.md)。
 
 ---
 
@@ -130,7 +119,7 @@ CS.Demo.Process(null);
 
 - 输入：**仅** szarray exotic
 - 元素：**blittable**（基元或仅 blittable 字段的 struct）
-- 输出：`Uint8Array` 或 binary string（实现二选一，须文档化）
+- 输出：复制的 Uint8Array
 
 ### 8.2 `zents.to_array`
 
@@ -159,7 +148,7 @@ const arr = zents.new_szarray_by_element_type(zents.types.int32, 10);
 
 ## 10. `ref` / `out` / `in` 数组形参
 
-- **JS → C#：** 共享引用；**rebind 不可见**（[03-BYREF.md](./03-BYREF.md)、[06-CLASS.md](./06-CLASS.md)）
+- **JS → C#：** ref/in 使用引用输入；out 不占输入，结果通过元组返回；ref 的新引用也通过结果元组返回，rebind 不会修改 JS 变量（[03-BYREF.md](./03-BYREF.md)、[06-CLASS.md](./06-CLASS.md)）
 - **C# → JS：** 默认 **OpaqueValue**
 - 原地改元素 **可见**；`ref arr = other` **不回写** JS 变量
 
@@ -179,3 +168,10 @@ szarray/mdarray Push/Pop、`to_bytes`/`to_array`、`Bytes`、错误消息 — **
 | [02-MARSHAL-AS.md](./02-MARSHAL-AS.md) | Bytes、params |
 | [01-OVERVIEW.md](./01-OVERVIEW.md) | undefined/null |
 | [../02-TYPE-SYSTEM.md](../02-TYPE-SYSTEM.md) | 数组 API |
+
+
+## 13. 显式策略与结果方向
+
+Bytes 仅为 byte[] 定义复制的 Uint8Array，不经 UTF-8 string。Default 64 位元素按 number 转换，to_array 不自动 opt-in BigInt，不能把整个 long[]/ulong[] 标注为 BigInt。
+
+JS→CLR out 数组不占输入，以结果元组返回；ref/in wrapper 的元素原地修改可见，临时引用重新绑定不回写 JS 变量。数组引用、含引用元素和堆中 struct 写入都需要正确 GC 根与 write barrier。TypedArray 指向 WASM 内存时，不能在内存增长后继续使用旧 view；默认复制不承诺共享。

@@ -18,20 +18,22 @@ title: "QuickJS 构建"
 
 ## 1. 引擎定位
 
-ZenTS **仅** 支持 QuickJS 作为 JavaScript 引擎；**不存在** ZLua 式的多引擎矩阵（无 PUC-Rio / LuaJIT 切换）。
+Editor 与非 HostJs 的 Il2Cpp Player **仅** 使用 QuickJS。**不存在** ZLua 式的多引擎矩阵（无 PUC-Rio / LuaJIT 切换）。**WebGL Player** 不把 QuickJS 编进 WASM，业务脚本跑在页面自带的 JS 引擎上，见 [06-HOSTJS.md](./06-HOSTJS.md)。
 
 | 层 | 约定 |
 |----|------|
 | Settings | `quickjsVersionId`（如 `quickjs-2026-06-04`） |
 | Editor | 动态库逻辑名 **`quickjs`** → `Plugins/quickjs/quickjs.dll`（或平台等价物） |
-| Il2Cpp | 上游 **可编译 C 源码** 安装到 `Local.../libil2cpp/quickjs` |
+| Il2Cpp（非 HostJs） | 上游 **可编译 C 源码** 安装到 `Local.../libil2cpp/quickjs` |
+| WebGL Player | **不** 安装 `libil2cpp/quickjs`。见 [06-HOSTJS.md](./06-HOSTJS.md) |
 | Define | `ZENTS_QUICKJS`（及 Install 写入的 Unity 版本相关宏，见 [11-MULTI-VERSION.md](../11-MULTI-VERSION.md) §7） |
 
 **原则：**
 
 - **Editor** 通过 `DllImport("quickjs")` 加载 Plugins 动态库；`ZenTS.Mono` 经 P/Invoke 调用 QuickJS API。
-- **Il2Cpp** 中 `zents-runtime` 与 QuickJS 源码 **静态编进同一 native 产物**；不经托管 P/Invoke 热路径。
-- Il2Cpp 使用包内 **vendored** 树 **`ZenTS~/quickjs-il2cpp/`**（已含 MSVC/Bee 适配）；**不对 QuickJS 使用 patch 机制**。升版本时直接更新该目录。
+- **非 HostJs 的 Il2Cpp** 中 `zents-runtime` 与 QuickJS 源码 **静态编进同一 native 产物**；不经托管 P/Invoke 热路径。
+- **WebGL Player** 使用 HostJs 垫片。Install 不拷贝 QuickJS 源码，链接产物不含 `quickjs.c`。
+- Il2Cpp 使用包内 **vendored** 树 **`ZenTS~/quickjs-il2cpp/`**（已含 MSVC/Bee 适配）；**不对 QuickJS 使用 patch 机制**。升版本时直接更新该目录。HostJs 目标不安装这棵树。
 
 ---
 
@@ -86,7 +88,7 @@ Editor DLL 仍可按需用完整 `quickjs-libc` 构建（`mono-native` / Plugins
 Install 流水线细节见 [11-MULTI-VERSION.md](../11-MULTI-VERSION.md) §3。与本引擎相关的步骤摘要：
 
 1. 读取 **`ZenTS~/quickjs-il2cpp/VERSION`**，同步 Settings **`quickjsVersionId`**。
-2. **整目录拷贝** `ZenTS~/quickjs-il2cpp/` → **`Local.../libil2cpp/quickjs/`**（去掉 README；确认无 §2.3 文件）。**无** QuickJS patch 步骤。
+2. **整目录拷贝** `ZenTS~/quickjs-il2cpp/` → **`Local.../libil2cpp/quickjs/`**（去掉 README；确认无 §2.3 文件）。**无** QuickJS patch 步骤。HostJs 目标跳过这一步，见 §5。
 3. 写入 Scripting Define **`ZENTS_QUICKJS`** 与 **`ZenTSConf.inc`**。
 4. 将 **`ZenTS~/zents-runtime`** 覆盖到 **`Local.../libil2cpp/zents`**。
 
@@ -144,11 +146,11 @@ Editor 上 JS→C# 回调 **不得** 在托管 reverse-P/Invoke 帧内直接 **`
 
 ## 5. Il2Cpp 平台面
 
-QuickJS 源码进树后，凡 Unity / 团结 **Il2Cpp 常规支持的目标**均可按 Unity 流程构建，包括但不限于 **Win64 / Android / iOS / WebGL / 微信小游戏 / 鸿蒙 / 车机** 等桌面、移动、小游戏与车载目标；**无**「仅移动平台 + 外置静态库」的特例（区别于 ZLua LuaJIT 模型）。平台矩阵见 [兼容性](/docs/getting-started/compatibility/)。
+QuickJS 源码进树后，**非 HostJs** 的 Unity / 团结 Il2Cpp 目标按 Unity 流程构建，包括但不限于 **Win64 / Android / iOS / 鸿蒙 / 车机**。**无**「仅移动平台 + 外置静态库」的特例（区别于 ZLua LuaJIT 模型）。**WebGL Player 不在此列**：它不把 QuickJS 编进 WASM。平台矩阵见 [兼容性](/docs/getting-started/compatibility/)。
 
 | 注意 | 说明 |
 |------|------|
-| **WebGL / 小游戏** | 允许；须确认 QuickJS 编译选项与 Il2Cpp WASM / 小游戏工具链兼容（见 `impl/IL2CPP.md`） |
+| **WebGL / 小游戏** | WebGL Player 使用 HostJs（[06-HOSTJS.md](./06-HOSTJS.md)）。目标名含 `MiniGame`、`Weixin`、`Douyin`、`TikTok` 的小游戏同样不安装 QuickJS。小游戏模板本身不在本期 |
 | **线程** | ZenTS v1 为 **单主 `JSContext`**（[10-LIFETIME.md](../10-LIFETIME.md) §6）；QuickJS Worker API **不在** v1 规范范围 |
 | **bigint** | 引擎支持 bigint，但 ZenTS v1 **禁止** bigint 作为 CLR 整数通道（[00-OVERVIEW.md](../00-OVERVIEW.md) §1.3） |
 

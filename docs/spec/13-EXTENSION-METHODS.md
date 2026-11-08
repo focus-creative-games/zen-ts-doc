@@ -2,16 +2,13 @@
 sidebar_position: 13
 title: "C# Extension 方法"
 ---
-:::note 文档站副本
-本页为语义契约的发布副本；请在上游 `ZenTSTest/Docs/spec` 修改后执行 `npm run sync-spec`。（源：`13-EXTENSION-METHODS.md`）
-:::
 
-
+> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
 # 13 — C# Extension 方法
 
 > 约定如何把 C# **extension methods** 暴露到被扩展类型的 JavaScript **实例** method 表（`obj.ExtMethod(args)` 方法调用绑定 `this`）。
 > 适用于 **Il2Cpp（Player）** 与 **Mono（Editor）**。
-> 成员 Bind → [metatable/03-BINDING.md](./metatable/03-BINDING.md)；重载 → [04-METHOD-OVERLOAD.md](./04-METHOD-OVERLOAD.md)；别名 → 同文 §5。
+> 成员 Bind → [metatable/03-BINDING.md](./metatable/03-BINDING.md)；重载 → [04-METHOD-OVERLOAD.md](./04-METHOD-OVERLOAD.md)；别名 → [Host API](./01-HOST-API.md)。
 
 ---
 
@@ -50,7 +47,7 @@ title: "C# Extension 方法"
 
 ## 2. 配置源（发现扩展类列表）
 
-Bind 类型 **T** 时，扩展类列表 = **Attribute 并集 ∪ XML 并集**（§2.3）。
+Bind 类型 **T** 时，扩展类列表 = **Attribute 并集 ∪ AOT XML 并集**（§2.3）。XML 只适用于 AOT 程序集；热更新程序集必须使用 Attribute。所有运行时 XML 注册、重载和热更新入口均不提供。
 
 ### 2.1 `[JsExtension]`（标在被扩展类型上）
 
@@ -108,7 +105,7 @@ public class MyBehaviour : MonoBehaviour { }
 | 项 | 约定 |
 |----|------|
 | 同一被扩展类型 | Attribute 列表 ∪ XML 列表（**并集**） |
-| Mono | `Initialize` 加载 `jsExtensionXmlPaths`；Bind 时解析 |
+| Mono | 新会话 Initialize 读取 AOT 配置快照；Bind 使用该快照，不重新读取 XML |
 | Il2Cpp | **Generate** 写入静态表；**Player 不读 XML** |
 | 扩展类无法解析 | Generate **硬失败**；Mono **throw**（**不**静默丢） |
 
@@ -149,8 +146,8 @@ CLR 上 extension 为 **static**，JS 侧必须表现为 **实例方法**。
 |----|------|
 | 表 | **仅**实例 **IEO method 表**；**不**挂到被扩展类型 **STO** |
 | 调用 | **静态** `Call` / Invoke；JS **`obj.Method(a,b)`** 方法调用 → receiver 为 CLR 参数 **0**；其余实参对齐 `this` 之后形参 |
-| `jsArity` | = CLR 形参个数 **减 1** |
-| 全签名键 | `MethodName(Types…)` **只含** `this` **之后** 的形参类型全名（[04-METHOD-OVERLOAD.md](./04-METHOD-OVERLOAD.md) §3.7） |
+| `jsArity` | 去掉 receiver（CLR this）后，按统一槽规则计算：out 不占输入，UnpackedValues 展开，optional/params 使用可变输入范围 |
+| 全签名键 | `MethodName(Types…)` **只含** `this` **之后** 的形参类型全名（见 [重载规则](./04-METHOD-OVERLOAD.md)） |
 | Mono / Il2Cpp | Emit 与 MethodBridge 均须识别「extension 候选」标志 |
 
 **禁止：**

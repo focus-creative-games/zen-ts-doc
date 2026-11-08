@@ -67,12 +67,12 @@ ZenTS~/
 │       │   └── 6000.5.6.patch
 │       └── 6000/
 │           └── 6000.0.0.patch
-├── jslib/                    # zentslib.js 等
-├── types/                    # zents.d.ts、tsconfig.base.json（编辑期；见 [14-TYPESCRIPT.md](./14-TYPESCRIPT.md)）
+├── jslib/                    # zentslib.js 等（Ensure → `Library/ZenTS/CoreLibs/jslib`）
+├── types/                    # zents.d.ts、tsconfig.base.json（Ensure → `Library/ZenTS/CoreLibs/types`；见 [14-TYPESCRIPT.md](./14-TYPESCRIPT.md)）
 └── link.xml
 ```
 
-Editor DLL 维护可另用 `Library/ZenTS/QuickJsSrcCache/`（可选，非 Install 必需）。
+Editor DLL 维护可另用 `Library/ZenTS/QuickJsSrcCache/`（可选，非 Install 必需）。`Library/ZenTS/CoreLibs/` 为 tsc/IDE 暂存（gitignore），与 Il2Cpp Local 树并列。
 
 ### 2.1 目录 / 版本 id 命名
 

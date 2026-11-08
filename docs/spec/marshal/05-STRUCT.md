@@ -2,11 +2,8 @@
 sidebar_position: 11
 title: "Struct Marshal"
 ---
-:::note 文档站副本
-本页为语义契约的发布副本；请在上游 `ZenTSTest/Docs/spec` 修改后执行 `npm run sync-spec`。（源：`marshal\05-STRUCT.md`）
-:::
 
-
+> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
 # Struct Marshal
 
 > **规范性：** C# struct（值类型）与 JavaScript 互操作的传递、构造与写回规则。
@@ -101,7 +98,7 @@ title: "Struct Marshal"
 | 形态 | 说明 |
 |------|------|
 | **OpaqueValue** | 须仍在有效 scope；Pop 绑定地址 |
-| **ByVal exotic** | by-val：拷贝 payload；`ref`/`out`/`in`：payload 地址（§6） |
+| **ByVal exotic** | by-val：拷贝 payload；`ref`/`in`：payload 地址；JS→CLR out 不占输入（§6） |
 | **`new Type(...)` / `Type._default()`** | ByVal payload |
 | **`UnpackedValues`** | N 个连续实参 |
 | **`Table`** | 单个 plain object；`Nullable` 另接受 `null`/`undefined` |
@@ -114,7 +111,7 @@ title: "Struct Marshal"
 
 见 [03-BYREF.md](./03-BYREF.md)。要点：
 
-| JS 实参 | `ref`/`out`/`in` A（值类型） |
+| JS 实参 | ref/in A（值类型） |
 |---------|------------------------------|
 | **ByVal exotic**，类型 **== A** | payload 地址，**可写回** |
 | **ByVal exotic**，**A = `Nullable<T>`**，exotic 类型 **== T** | 拷入 `Nullable<T>` 临时槽 |
@@ -135,7 +132,7 @@ console.assert(p.x === 11);
 
 | `JsMarshalType` | JS → C# | C# → JS |
 |-----------------|---------|---------|
-| **`UnpackedValues`** | 连续 N 实参 | **Array** 长度 N（或 bridge 约定） |
+| **`UnpackedValues`** | 连续 N 实参 | 返回值/out 槽为长度 N 的 Array；作为 out 元组元素时不拍平 |
 | **`Table`** | plain object；Nullable 无值 → `null`/`undefined` | plain object；无值 → **`null`** |
 
 类型级示例：
@@ -216,3 +213,10 @@ Blittable：仅 `memcpy` 到 payload。
 | 枚举 | [08-ENUM.md](./08-ENUM.md) |
 | `zents.*` | [../05-LIB.md](../05-LIB.md) |
 | 类型对象 | [../02-TYPE-SYSTEM.md](../02-TYPE-SYSTEM.md) §3.7 |
+
+
+## 15. 目标补充
+
+JS→CLR out 使用独立 default(T) 临时槽并加入结果元组，不接受旧占位语法；ref/in 按原地址或临时副本规则。in 不授权写入，任何通过 Opaque 再传 ref 的只读绕过都应拒绝。
+
+ByVal/ByObj 是引擎无关形态。含引用字段副本必须由 CLR GC 追踪；堆字段与数组写入执行 write barrier。Table 的成员可各自有合法 BigInt 标注，但不能把整个 struct 标成 BigInt。ActualTypeUserData 不适用于值类型返回。

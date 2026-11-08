@@ -2,17 +2,14 @@
 sidebar_position: 14
 title: "枚举 Marshal"
 ---
-:::note 文档站副本
-本页为语义契约的发布副本；请在上游 `ZenTSTest/Docs/spec` 修改后执行 `npm run sync-spec`。（源：`marshal\08-ENUM.md`）
-:::
 
-
+> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
 # 枚举 Marshal
 
 > **规范性：** C# `enum` 在 JavaScript 与 C# 之间的默认 Marshal 规则。
 > **相关：** 类型表常量 → [../02-TYPE-SYSTEM.md](../02-TYPE-SYSTEM.md) §3.5；`zents.box` → [../05-LIB.md](../05-LIB.md)；`ref` enum → [03-BYREF.md](./03-BYREF.md)；`[JsMarshalAs]` → [02-MARSHAL-AS.md](./02-MARSHAL-AS.md)。
 
-**平台原则：** 枚举默认 **不** 推送 exotic，而按 **`number`（整数）** Marshal。**v1 禁止 bigint 通道**（[../00-OVERVIEW.md](../00-OVERVIEW.md) §1.3）。
+**平台原则：** 枚举默认 **不** 推送 exotic，而按 **`number`（整数）** Marshal。enum 默认不接受 bigint；Int64/UInt64 的显式 BigInt 策略不自动适用于 enum（[../00-OVERVIEW.md](../00-OVERVIEW.md) §1.3）。
 
 ---
 
@@ -85,7 +82,7 @@ const boxed2 = zents.box(Color, 2);
 
 ---
 
-## 6. `ref` / `out` / `in` enum
+## 6. ref/in 与 out enum
 
 | JS 实参 | 行为 |
 |---------|------|
@@ -128,7 +125,14 @@ C#→JS：`ref enum` 默认 **OpaqueValue**。
 
 | 文档 | 内容 |
 |------|------|
-| [01-OVERVIEW.md](./01-OVERVIEW.md) | number、禁止 bigint |
+| [01-OVERVIEW.md](./01-OVERVIEW.md) | 默认 number；BigInt 仅限显式标注的 Int64/UInt64 槽 |
 | [03-BYREF.md](./03-BYREF.md) | byref |
 | [05-STRUCT.md](./05-STRUCT.md) | box 对比 |
 | [../02-TYPE-SYSTEM.md](../02-TYPE-SYSTEM.md) | 枚举类型表 |
+
+
+## 11. 显式 BigInt 的边界
+
+enum 的默认常量、参数、返回值按底层整数转换成 number，即使底层是 Int64/UInt64 也不会自动 bigint。本轮 BigInt 标注的合法目标仅为 Int64/UInt64 槽，不能直接标在 enum 上。
+
+JS→CLR out enum 不占输入，以结果元组返回 number；C#→JS 的 out enum 仍为 Opaque。旧正文中 byref 的输入分支仅适用于 ref/in，不能用作 out 占位规则。

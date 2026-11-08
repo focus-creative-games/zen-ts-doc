@@ -78,24 +78,30 @@ Runtime           moduleLoader / csharp: / CSharp / zents   ← 既有语义
 ```
 <UnityProject>/
   TsProject/
-    package.json                 # 仅 devDependencies：typescript、esbuild
-    tsconfig.json                # extends 包内 tsconfig.base.json
-    src/                         # 业务 TS（入库）
+    package.json                 # devDependencies only: typescript, esbuild
+    tsconfig.json                # extends Library/ZenTS/CoreLibs/types/tsconfig.base.json
+    src/                         # app TS (committed)
       main.ts
       game/logic.ts
-    generated/                   # 生成声明（入库）
-      csharp/                    # 每命名空间一个 .d.ts；文件名不含 ":"
-    out/                         # emit；默认 gitignore
+    generated/                   # generated decls (committed)
+      csharp/                    # one .d.ts per namespace; filenames omit ":"
+    out/                         # emit; gitignored by default
       main.js
       main.js.map
       game/logic.js
-  Assets/StreamingAssets/ZenTS/    # Player 构建拷贝；非 Editor 热路径权威源
-  Packages/com.code-philosophy.zen-ts/ZenTS~/types/
-    zents.d.ts
-    tsconfig.base.json
+  Assets/StreamingAssets/ZenTS/    # Player build copy; not the Editor hot-path source of truth
+  Library/ZenTS/CoreLibs/          # Editor-staged from the package (gitignored); for tsc / IDE
+    types/
+      zents.d.ts
+      tsconfig.base.json
+    jslib/
+      zentslib.js
+  Packages/.../ZenTS~/types/       # package canonical source (copied into CoreLibs by Ensure)
 ```
 
-菜单 **`ZenTS/Init TypeScript Project`**：把包内脚手架 **复制** 到 `TsProject/`（UPM 只读，不在包内直接改工程 tsconfig）。
+Menu **`ZenTS/Init TypeScript Project`**: copies the in-package scaffold into `TsProject/` (UPM is read-only; do not edit the package tsconfig in place). The scaffold `tsconfig` points at **`../Library/ZenTS/CoreLibs/types/...`**, so it does not require a physical `Packages/{name}` folder (git UPM lands in `PackageCache`; Unity’s virtual `Packages/` path is invisible to `tsc`).
+
+The Editor **Ensure**s `Library/ZenTS/CoreLibs` on **Install**, **Init TypeScript**, **Compile / Play gate**, and after domain reload (copies `types` + `jslib` from the package `resolvedPath`).
 
 | 路径 | 版本库 |
 |------|--------|

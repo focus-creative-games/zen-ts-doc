@@ -1,11 +1,9 @@
-:::note 文档站副本
-本页为语义契约的发布副本；请在上游 `ZenTSTest/Docs/spec` 修改后执行 `npm run sync-spec`。（源：`02-TYPE-SYSTEM.md`）
-:::
-
-﻿---
+---
 sidebar_position: 3
 title: "类型系统"
 ---
+
+> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
 
 # 02 — 类型系统
 
@@ -26,7 +24,7 @@ title: "类型系统"
 | 语义贴近 C# | `Type.staticMethod()`、`obj.instanceMethod()`、`new Type(...)` |
 | 静实例隔离 | 静态与实例使用 **独立** 元数据与三表 |
 | 仅 public | JS 仅可访问 `public` 成员 |
-| Bind 期扁平继承 | 静/实例成员均在 **EnsureBinding** 写入当前类型三表；**无**运行时沿继承链查找 |
+| Bind 期扁平继承 | 静/实例成员均在 **EnsureBinding** 写入当前类型三表；普通键无运行时继承 promotion；全签名键有受限的懒解析例外 |
 | 属性 miss | 读/写未注册成员 → **`throw Error('zents: …')`**（见 [metatable/02-INDEX.md](./metatable/02-INDEX.md)） |
 | 方法 this | `obj.Method(args)` 作为 **方法调用** 时自动传入 CLR `this`；提取函数 **不** 自动绑定 |
 
@@ -102,16 +100,9 @@ CSharp.AC['MyGame.UI.Outer+Inner']
 
 ### 2.4 类型实参（typeArg）
 
-用于 `zents.make_generic_type`、`make_szarray_type` 等（见 `05-LIB.md`）。
+公共 typeArg 接受 CSharp/csharp: 类型对象、闭合类型/数组工厂结果、完整 CLR 类型名（含 AQN，不限 corlib）、zents.types 常量以及 System.Type wrapper。普通 JS 对象不能伪装类型。
 
-| 形式 | 说明 |
-|------|------|
-| `CSharp[assembly][typeFullName]` 或 `csharp:` named export | 类型对象（二者 identity 相同，§2.11） |
-| `zents.make_generic_type` / `make_szarray_type` / `make_mdarray_type` 返回值 | intern 类型对象 |
-| mscorlib **字符串** | 如 `"System.Int32"`；**仅** corlib |
-| `zents.types.*` | mscorlib 全名常量 |
-
-**禁止：** 任意普通 JS object、非 ZenTS exotic object、`zents.typeof(...)` 返回值作为 `make_*_type` 的 typeArg（`typeof` 供签名等，见 §2.7）。
+`zents.typeof` 返回的反射对象可再作为 typeArg。GTAP 是严格子集，只接受 System.Type wrapper，不能直接使用类型对象/字符串；需要宽松形式时用 inflate。
 
 ### 2.5 泛型类型
 
@@ -150,7 +141,7 @@ const ListInt = zents.make_generic_type(
 const t2 = zents.typeof(ListInt);   // 闭合泛型 / 数组等任意类型对象均可
 ```
 
-`typeObject` 为 **任意** ZenTS 类型对象。**返回值** 为该类型的 **`System.Type` 反射对象**（class exotic object），语义对应 C# `typeof(T)`。可供需要 `System.Type` 的 API / 签名场景使用；**不**作为 §2.4 typeArg。
+`typeObject` 为 **任意** ZenTS 类型对象。**返回值** 为该类型的 **`System.Type` 反射对象**（class exotic object），语义对应 C# `typeof(T)`。可供需要 `System.Type` 的 API、签名及公共 typeArg 使用；GTAP 仍只接受这种 System.Type wrapper。
 
 ### 2.8 `zents.types` / `zents.get_type_from_name`
 
@@ -312,7 +303,7 @@ const ListInt = zents.make_generic_type(List, zents.types.int32);
 |----|------|
 | Identity | `import { T }` 得到的对象 **必须** 与 `CSharp[assembly][typeFullName]` **同一引用** |
 | 成员绑定 | EnsureBinding 急切度 **不得高于** 取得该类型对象的 `CSharp[...]` 路径 |
-| 同模块其它类型 | 静态 `import { Panel }` **只** 物化 `Panel`；**禁止** 因打开该命名空间模块而对未 import 的类型做 EnsureBinding |
+| 同模块其它类型 | 静态 `import { Panel }` 可以轻量创建导出类型句柄，但**禁止** 因模块导出枚举对未使用类型预先构建成员绑定表 |
 | `CSharp` 上 miss | 仍 **throw**（§2.9） |
 | `csharp:` 未导出的静态 import | 遵循 **普通 ES 模块** 链接失败（名字不在 export 列表） |
 | `import * as ns; ns.Missing` | 标准模块命名空间 → **`undefined`**（**不是** `CSharp` 的 miss throw） |
@@ -323,11 +314,11 @@ const ListInt = zents.make_generic_type(List, zents.types.int32);
 
 #### 2.11.6 Loader 与 `GetFunction`
 
-`csharp:` 由 ZenTS 运行时 **在宿主 `moduleLoader` 之前** 拦截并合成模块，**不得** 把 `csharp:` specifier 传给业务 loader。与第三方原生 C 模块的优先级见 [build/05-NATIVE-MODULES.md](./build/05-NATIVE-MODULES.md)：`csharp:` 为 ZenTS 保留，**禁止** 第三方以同一前缀注册。
+`csharp:` 由 ZenTS 保留解析器或 HostJs 构建器合成模块，**不得** 把 `csharp:` specifier 传给业务 loader。与第三方原生 C 模块的优先级见 [build/05-NATIVE-MODULES.md](./build/05-NATIVE-MODULES.md)：`csharp:` 为 ZenTS 保留，**禁止** 第三方以同一前缀注册。
 
-`csharp:` 模块的 named export 是 **类型对象**，一般 **不是** 业务 callable。`GetFunction<T>(jsModule, jsExportName)` **不应** 以 `csharp:` specifier 作为脚本入口；若误用，按现有规则因「非 callable」抛 C# 异常。
+`csharp:` 模块的 named export 是 **类型对象**，一般 **不是** 业务 callable。`GetFunction<T>(jsModule, jsExportName)` **不应** 以 `csharp:` specifier 作为脚本入口；若误用，明确拒绝该保留前缀并抛 C# 异常，不依赖类型对象是否恰为 callable。
 
-合成模块 **无** 源码、**无** 相对 `import`；业务模块用绝对 `"csharp:…"` 引用。声明文件如何生成见 [14-TYPESCRIPT.md](./14-TYPESCRIPT.md) §6。
+合成模块不对应业务磁盘文件，可由 native 模块接口或构建器生成；业务模块用绝对 `"csharp:…"` 引用。声明文件如何生成见 [14-TYPESCRIPT.md](./14-TYPESCRIPT.md) §6。
 
 #### 2.11.7 非目标（本节明确不做）
 
@@ -337,7 +328,7 @@ const ListInt = zents.make_generic_type(List, zents.types.int32);
 | 命名空间对象链 | **不** 提供官方 `CS.MyGame.UI.Panel`；迁移见 [12-MIGRATION-ADAPTORS.md](./12-MIGRATION-ADAPTORS.md) |
 | 闭合泛型 / 数组 export | 继续 `zents.make_*` / `get_type_from_name` |
 | CommonJS `require` | v1 范围外 |
-| 运行时依赖 `.d.ts` | QuickJS **不**加载声明文件。生成契约、入库与 `tsc` 见 [14-TYPESCRIPT.md](./14-TYPESCRIPT.md) |
+| 运行时依赖 `.d.ts` | 运行时引擎**不**加载声明文件。生成契约、入库与 `tsc` 见 [14-TYPESCRIPT.md](./14-TYPESCRIPT.md) |
 
 ---
 
@@ -390,7 +381,7 @@ instance exotic object
 |------|------|
 | `T.__byvalInstanceProto` → ByVal IEO | 构造时挂接 |
 | `T.__byobjInstanceProto` → ByObj IEO | 构造 class、boxed struct 等时挂接 |
-| `instance.__type` → `T` | `typeof`、register_method 域推断 |
+| `instance.__type` → `T` | 反射类型查询与内部门面关联；不是运行时挂短名入口 |
 | `TypeBinding` | 持有 staticMap、byval/byobj instance map |
 
 ### 3.4 延迟初始化（EnsureBinding）
@@ -407,7 +398,7 @@ instance exotic object
 
 - Bind 期：**public static literal** → 类型对象自有属性，值为 **number**（underlying 整型）
 - **无** `[[Construct]]` / `_default` / `_ctor`
-- 默认跨边界：**number**（`spec/marshal/08-ENUM.md`）；**禁止** bigint
+- 默认跨边界：**number**（`spec/marshal/08-ENUM.md`）；默认不接受 bigint；Int64/UInt64 的显式 BigInt 策略另见 MarshalAs 合法集合
 - boxed 实例：**仅** `zents.box(E, value)` → ByObj
 
 ```javascript
@@ -418,20 +409,16 @@ const redBox = zents.box(Color, Color.Red);
 
 ### 3.6 Nullable\<T\>
 
-闭合 `Nullable<T>` 类型对象 `N`：
-
-- `__nullable : true`；**无** `__byvalInstanceProto` / `__byobjInstanceProto` / IEO
-- STO **仅** `[[Construct]]` → 构造 **element 类型 `T`** 的有值实参（非 Nullable 包装实例）
-- `null` → JS **`null`**（**不是** `undefined`；见 [00-OVERVIEW.md](./00-OVERVIEW.md) §1.4）
+闭合 Nullable\<T\> 的无值表示为 JS null，有值表示为 T 的 JS 值，不创建具有独立 Nullable 实例成员表的 wrapper。Nullable 值工厂使用 callable `N(value)`；目标不提供 `new N(...)` 返回原始 number/boolean 的承诺，因为 JS 构造结果必须为对象。
 
 ```javascript
-const NullableInt = zents.make_generic_type(
-    CSharp.mscorlib['System.Nullable`1'],
-    zents.types.int32
-);
-CS.Service.Take(NullableInt(42));   // 有值：number
-CS.Service.Take(null);              // null
+const N = zents.make_generic_type(CSharp.mscorlib['System.Nullable`1'], zents.types.int32);
+const value = N(42);
+Service.Take(value);
+Service.Take(null);
 ```
+
+Nullable\<long/ulong\> 的默认有值仍为 number；本轮 BigInt 合法集合不自动扩展到整个 Nullable\<T\> 槽。C# nullable 引用注解不等于 System.Nullable\<T\>。
 
 ### 3.7 struct
 
@@ -480,7 +467,7 @@ const p = new Point(3, 4);
 
 ### 4.4 方法
 
-见 `04-METHOD-OVERLOAD.md`：单重 → direct function；多重 → dispatch；`[JsAlias]` / `register_method`。
+见 `04-METHOD-OVERLOAD.md`：单重 → direct function；多重 → dispatch；Bind 期 `[JsAlias]` / AOT XML，以及受限的全签名键懒解析。
 
 **调用约定：**
 
@@ -553,23 +540,18 @@ demo.remove_ValueChanged(handler);
 
 ## 6. 泛型方法
 
-针对 **方法自身** 带泛型参数，如 `void Foo<T>(T a)`。闭合泛型类上的方法 **不** 走本节。
-
-### 6.1 调用约定
+### 6.1 显式 inflate
 
 ```javascript
-// Type.Foo 为 direct generic method function
-const foo_int = zents.make_generic_method(Type.Foo, zents.types.int32);
-foo_int(obj, value);   // 静态则无需 obj
+const f = zents.inflate(ClosedType, "Describe(T)", zents.types.int32);
+const result = f.call(instance, 42);
 ```
 
-使用 `05-LIB.md` `make_generic_method` 单态化泛型方法 function。
+只闭合方法自身的泛型参数；声明类型须已闭合。静态 closure 不需要实例；实例 inflate 返回 ByObj 约定。不要从旧 closure 推断 ByVal，因此目标 API 不提供 make_generic_method(closure, ...)。
 
-### 6.2 缓存
+### 6.2 GTAP 与缓存
 
-相同 `(genericMethodBase, typeArgs…)` **intern** 为同一 inflated direct function（Il2Cpp：写入 `NameMetaMap` 内部签名键）。
-
----
+直接调用开放泛型方法时，先传 N 个 System.Type wrapper 再传余参。满足前缀和闭合签名的泛型路径优先于普通候选。ByVal 使用触发侧自己的 GTAP。显式/隐式闭合共用含 closedMethod、isStatic、isByVal 的 intern，约束或 AOT 代码缺失明确失败。
 
 ## 7. 数组
 
@@ -613,7 +595,7 @@ const x = matrix.get(0, 1);
 
 | API | 说明 |
 |-----|------|
-| `zents.to_bytes` | blittable 元素 szarray → 按内存字节拷贝为 `Uint8Array` / binary string（实现二选一，须文档化） |
+| `zents.to_bytes` | blittable 元素 szarray → 按内存字节拷贝为 复制的 `Uint8Array`（拒绝 bool[]、char[] 和含托管引用的元素） |
 | `zents.to_array` | szarray → JS `Array`（0..n-1 连续索引） |
 
 ---
@@ -623,7 +605,7 @@ const x = matrix.get(0, 1);
 | 类型 | 说明 |
 |------|------|
 | 接口 | 可解析；不可构造（无 public 构造） |
-| 抽象类 | 仅 public 构造可 `new` |
+| 抽象类 | 不可构造；有 public 构造也不可 `new` |
 | 静态类 | 仅静态成员；无 `[[Construct]]` |
 | 枚举 | §3.5；`spec/marshal/08-ENUM.md` |
 | Nullable\<T\> | §3.6 |
@@ -696,3 +678,14 @@ const Inner = CSharp.AC['MyGame.UI.Outer+Inner'];
 | 数组 get/set | `ArrayMarshal` + instance map | 等价绑定 |
 
 细节见 `impl/IL2CPP.md`、`impl/MONO.md`。
+
+
+## 12. 语言协议、门面与配置补充
+
+普通 CLR 成员 miss 必须抛错；真实成员查找之后，未实现的 then 或 Symbol 协议探测可按 JS 协议返回 undefined，不能把 wrapper 意外变成 thenable。已绑定真实同名成员仍按正常规则处理。保留诊断元数据须只读，不能允许业务伪造裸 klass/对象指针。
+
+默认 ByObj 门面来自声明类型；仅合法的返回值 ActualTypeUserData 显式改为实际类型，不改对象身份。Int64/UInt64 默认 number，显式 BigInt 只影响合法槽位，不改类型对象或 enum 的全局规则。
+
+Alias、MarshalAs、Extension XML 仅适用于 AOT 程序集，在初始化/Generate 消费；不支持运行时注册、热更新或 Reload。热更新程序集使用 Attribute。
+
+以上为目标设计；当前 P0/P1 状态以 [对齐状态](./03-ALIGNMENT.md) 为准。
