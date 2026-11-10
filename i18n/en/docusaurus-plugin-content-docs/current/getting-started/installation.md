@@ -1,36 +1,20 @@
 ---
 sidebar_position: 1
-title: 安装与集成
-description: "通过 UPM / Git URL 安装 ZenTS 包。"
+title: "Installation overview"
 ---
 
-# 安装与集成
+# Installation overview
 
-## 包标识
+Install ZenTS using a Git URL in Package Manager, or embed its source at `Packages/com.code-philosophy.zen-ts`.
 
-- UPM 包名：`com.code-philosophy.zen-ts`
-- 源码仓库：[focus-creative-games/zen-ts](https://github.com/focus-creative-games/zen-ts)
+Before running scripts:
 
-## 通过 Git URL 安装
+1. Install a supported Unity Editor and the required platform modules.
+2. Build the static SDK from the matching official V8 sources, build the ZenTS adapters, and import it into the project. The Editor also requires an SDK for its OS/CPU.
+3. SDKs are stored under `Library/ZenTS/NativeSDK`. Editor plugins and their `.meta` files are generated under `Assets/ZenTSGenerated/Native`.
+4. Run `ZenTS/Install...`. Prepare Player configuration using `ZenTS/Generate Xml Bindings`, `ZenTS/Generate Typings`, and the target build settings.
+5. Create a TypeScript project or provide a JS loader, then call `JsAppDomain.Initialize`.
 
-在 `Packages/manifest.json` 中加入：
+Restart the Editor after updating a loaded native plugin. SDKs, DLL/dylib/a/lib files, and generated native metadata are managed locally; they are not written into PackageCache or committed as package source.
 
-```json
-{
-  "dependencies": {
-    "com.code-philosophy.zen-ts": "https://github.com/focus-creative-games/zen-ts.git"
-  }
-}
-```
-
-也可在 Unity：**Window → Package Manager → + → Add package from git URL**。
-
-## 安装后
-
-1. 确认菜单出现 **ZenTS/**（Init TypeScript Project、Generate Typings、Compile 等）。
-2. 纯 JS 工程：准备 Loader + `JsScripts/`（见 [快速开始](/docs/getting-started/quick-start/)）。
-3. TypeScript 工程：执行 **ZenTS/Init TypeScript Project**，或直接打开 [ts-demo](https://github.com/focus-creative-games/zen-ts-demo)。
-
-## Il2Cpp 说明
-
-Player 使用包内 `ZenTS~/zents-runtime` 进入 LocalIl2Cpp / 导出工程。细节见 [构建](/docs/guides/build/) 与 [QuickJS 构建说明](/docs/spec/build/01-QUICKJS/)。
+See [SDK installation](../guides/install.md) for build/import commands and [bidirectional calls](../guides/hello-interop.md) for the first interop example.

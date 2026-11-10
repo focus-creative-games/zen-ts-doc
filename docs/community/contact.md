@@ -1,54 +1,19 @@
 ---
 sidebar_position: 4
-title: 联系方式
-description: QQ、Discord、Issue 与仓库。
+title: "社区与反馈"
 ---
 
-# 联系方式
+# 社区与反馈
 
-## 渠道
+- 源码与 Issues：[focus-creative-games/zen-ts](https://github.com/focus-creative-games/zen-ts)
+- 文档仓库：[focus-creative-games/zen-ts-doc](https://github.com/focus-creative-games/zen-ts-doc)
+- 示例工程：[zen-ts-demo](https://github.com/focus-creative-games/zen-ts-demo)
+- 文档站：[zen-ts.com](https://zen-ts.com)
+- Discord：[社区邀请](https://discord.gg/5bT7w9aRMz)
+- QQ 群：1095435513
+- 邮件：zts@code-philosophy.com
+- 相关项目：[ZLua 文档](https://doc.zlua.cn)
 
-- QQ 群：`1095435513`（ZenTS 交流群）
-- Discord：[https://discord.gg/5bT7w9aRMz](https://discord.gg/5bT7w9aRMz)
-- 源码与 Issue：[focus-creative-games/zen-ts](https://github.com/focus-creative-games/zen-ts)
-- Demo：[zen-ts-demo](https://github.com/focus-creative-games/zen-ts-demo)
-- 文档站：[zen-ts.com](https://zen-ts.com/)；文档源码 [zen-ts-doc](https://github.com/focus-creative-games/zen-ts-doc)
-- 邮件：`zts@code-philosophy.com`
+反馈问题时附 Unity/团结版本、平台与 CPU、V8/HostJs、SDK 指纹、最小 C#/JS 复现、首个异常及复现步骤。涉及平台构建时注明模拟器、开发者工具还是真机；日志先移除凭据和私人项目配置。
 
-### 同族产品
-
-| 产品 | 链接 | 备注 |
-|------|------|------|
-| ZLua（Lua） | [doc.zlua.cn](https://doc.zlua.cn) | 问题请发到对应仓库 / 群，避免混提 |
-| **zts-ue**（Unreal） | [focus-creative-games/zts-ue](https://github.com/focus-creative-games/zts-ue) | UE 上的 TypeScript 方案；**开发中**，勿与本站 Unity 问题混提 |
-
-## 提问模板
-
-在 QQ / Discord / Issue 提问时，直接粘贴下面结构（能填多少填多少）：
-
-```text
-【环境】
-- Unity / 团结版本：
-- 平台：Editor（Win / macOS） / Player（Win64 / Android / iOS / WebGL / 小游戏 / 鸿蒙…）：
-- ZenTS 版本或 commit：
-- 纯 JS 还是 TsProject：
-
-【现象】
-- 期望：
-- 实际：
-- 是否仅 Player 失败：
-
-【已做检查】
-- [ ] Install
-- [ ] Generate/All（Player）
-- [ ] 脚本已 Sync / 拷贝到 StreamingAssets
-- [ ] canonical 未带 .js
-- [ ] 未使用废弃 Event 糖语法
-
-【最小复现】
-- 步骤：
-- 关键 JS/TS + C# 片段：
-- 日志 / 栈：
-```
-
-更完整的复现要求见 [测试](/docs/community/testing/)。排障自助：[排障指南](/docs/guides/troubleshooting/)、[FAQ](/docs/community/faq/)。
+反馈文档问题时，请指出页面及对应示例；行为问题请附最小复现。

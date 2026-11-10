@@ -1,70 +1,68 @@
 ---
 sidebar_position: 2
-title: 快速开始
-description: 用 zen-ts-demo 的 js-demo / ts-demo 跑通最小闭环。
+title: "Run your first script"
 ---
 
-# 快速开始
+# Run your first script
 
-推荐直接使用官方 Demo：[zen-ts-demo](https://github.com/focus-creative-games/zen-ts-demo)。
+Start with a bidirectional call in the Editor, then publish for your target. Use Unity 2022.3.x LTS or a later LTS release and prepare the V8 SDK for the current Editor. Complete [installation](../guides/install.md) first.
 
-仓库含两个独立 Unity 工程：
+## Prepare TypeScript
 
-| 工程 | 说明 |
-|------|------|
-| `js-demo/` | 纯 JavaScript（ESM），脚本在 `JsScripts/` |
-| `ts-demo/` | TypeScript 工作流（`TsProject/`） |
+Run `ZenTS/Init TypeScript Project` to create `TsProject` at the Unity project root and prepare dependencies. Run `ZenTS/Generate Typings` for C# declarations, and `ZenTS/Compile TypeScript` to check and emit. Node.js is a build tool, not the script runtime.
 
-环境：推荐 Unity **2022.3 LTS**（亦支持 **2021.3.x** / **6000.0.x** / **6000.3.x** / **6000.5.x** / **团结引擎 1.x.y**，见 [兼容性](/docs/getting-started/compatibility/)）；`ts-demo` 需要本机 **Node LTS**。
+Create `TsProject/src/main.ts`:
 
-## 路径 A：js-demo（Editor）
-
-1. 用 Unity 打开 `js-demo/`。
-2. 确认 `Packages/manifest.json` 中 ZenTS 包路径可用（开发期多为 `file:…`，发布改为 git URL）。
-3. 打开 `Assets/Scenes/SampleScene`，点 **Play**。
-4. Console 应出现类似：`js main start`、C# 访问路径日志、`[identity] … OK`，以及 `AppAdd(10,20)=30`。
-
-要点：
-
-- C# → JS：`JsAppDomain.GetFunction`（named export）
-- JS → C#：`CSharp[…]` 与/或 `import from "csharp:…"`
-
-详见 [JS 调用 C#](/docs/guides/js-calling-csharp/) 与 [C# 调用 JS](/docs/guides/csharp-calling-js/)。
-
-## 路径 B：ts-demo（Editor）
-
-1. 用 Unity 打开 `ts-demo/`。
-2. 在工程根 `TsProject/` 执行 `npm install`（或菜单 **ZenTS Demo → Compile TypeScript**）。
-3. （可选）**ZenTS Demo → Generate Typings** 刷新 `generated/csharp/**`。
-4. Play；期望日志与 js-demo 类似（前缀 `ts main`）。
-
-进 Play 时若开启 TypeScript 闸门，会自动 `tsc --noEmit`；失败则阻止 Play。
-
-完整工作流见 [TypeScript 工作流](/docs/guides/typescript-workflow/)。
-
-## 最小自建（纯 JS）
-
-```csharp
-using System.IO;
-using System.Text;
-using UnityEngine;
-using ZenTS;
-
-public static class ZtsBootstrap
-{
-    static object LoadJsModule(string module)
-    {
-#if UNITY_EDITOR
-        var path = Path.Combine(Application.dataPath, "..", "JsScripts", module + ".js");
-#else
-        var path = Path.Combine(Application.streamingAssetsPath, "Js", module + ".js");
-#endif
-        return File.Exists(path) ? File.ReadAllText(path, Encoding.UTF8) : null;
-    }
-
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
-    static void Init() => JsAppDomain.Initialize(LoadJsModule);
+```typescript
+export function add(a: number, b: number): number {
+  return a + b;
 }
 ```
 
-模块名为 **canonical specifier**（相对逻辑路径，**不含** `.js`），例如 `"app"`。
+Emit should produce `TsProject/out/main.js`. See the [TypeScript workflow](../guides/typescript-workflow.md).
+
+## Call from C#
+
+Attach this component to a scene object. `JsFileModuleLoader` reads development output or published scripts from the conventional locations. Module names have no `.js` suffix.
+
+```csharp
+using System;
+using UnityEngine;
+using ZenTS;
+public sealed class ScriptEntry : MonoBehaviour
+{
+    private Func<int, int, int> add;
+    private void Start()
+    {
+        JsAppDomain.Initialize(JsFileModuleLoader.Load);
+        add = JsAppDomain.GetFunction<Func<int, int, int>>("main", "add");
+        Debug.Log(add(2, 3)); // 5
+    }
+}
+```
+
+Initialize once per domain, rather than in every component. Cache delegates and reacquire them after Reset takes effect.
+
+## Call C# from scripts
+
+Add a public type under Assets:
+
+```csharp
+public static class Demo
+{
+    public static int Add(int a, int b) => a + b;
+}
+```
+
+Generate declarations, then write:
+
+```typescript
+import { Demo } from 'csharp:Assembly-CSharp';
+export function run(): number { return Demo.Add(2, 3); }
+```
+
+`csharp:` is a synthesized type module, not a disk file or a GetFunction target.
+
+## Before publishing
+
+Run `ZenTS/Generate Xml Bindings` and `ZenTS/Generate Typings`. Preserve the required metadata, AOT generic instantiations, and bridge entry points, and prepare a matching target SDK. WebGL/WeChat use platform VMs and build-time factories, without Player V8 libraries. See [builds](../guides/build.md) and [platforms](compatibility.md).

@@ -1,96 +1,36 @@
 ---
 sidebar_position: 14
-title: 数组
-description: 一维 / 多维数组的创建、索引、to_array 与 to_bytes。
+title: "数组与字节数据"
 ---
 
-# 数组
+# 数组与字节数据
 
-通过 `zents` 创建 **szarray**（`T[]`）与 **mdarray**，在 JS 中按 C# 语义访问。权威：[数组 Marshal](/docs/spec/marshal/07-ARRAY/)、[类型系统 §7](/docs/spec/02-TYPE-SYSTEM/)、[05-LIB](/docs/spec/05-LIB/)。泛型集合（`List<T>` 等）见 [泛型](/docs/guides/generics/)。
-
-数组实例为 **ByObj exotic**（Registry + GC root）。元素读写经 **`arr.get` / `arr.set`** 与 **`arr.length`**（**不**实现整数键 `arr[i]`）。
-
-## 一维数组 `T[]`
+CLR 数组默认是保留对象身份的 wrapper，不是 JS Array。单维零基数组（SZArray）和多维数组使用相同的 CLR 下标访问模型。
 
 ```javascript
-// 方式 A：元素类型 + 长度
-const arr = zents.new_szarray_by_element_type(zents.types.int32, 4);
-
-// 方式 B：先构造数组类型
-const IntArray = zents.make_szarray_type(zents.types.int32);
-const arr2 = zents.new_szarray_by_szarray_type(IntArray, 4);
-
-arr.set(0, 10);      // 0 基，与 C# 一致
-arr.set(1, 20);
-console.log(arr.get(0));
-console.log(arr.length);
+const values = zents.new_szarray_by_element_type(zents.types.int32, 3);
+values.set(0, 10);
+values.set(1, 20);
+console.log(values.length, values.get(0));
+const copy = zents.to_array(values);
 ```
 
-引用类型元素可为 `null`。越界与 C# 相同 → `throw Error`。
+使用 `get`/`set`，不要用 `values[0]` 代替 CLR 数组访问。`to_array` 复制为零基 JS Array；修改复制品不会改写 CLR 数组。
 
-## JS → C#（szarray 形参）
+## 传入数组
 
-| 实参形态 | 行为 |
-|---------|------|
-| 数组 ByObj exotic | 类型须匹配目标 `T[]` |
-| **JS `Array`** | 索引 `0..n-1` **连续、无 holes** → 构造 `T[n]` |
-| `null` | `null` |
-| `undefined`（必选） | **throw** `zents: argument missing` |
+普通 `T[]` 参数接受匹配 CLR wrapper、null，或连续、无 holes 且元素可转换的 JS Array。类数组对象不是 JS Array，多维 CLR 数组不接受嵌套 JS Array 自动转换。显式 undefined 元素按元素槽位规则处理，不等同允许数组 holes。
 
-```javascript
-Demo.Process(arr);           // exotic
-Demo.Process([1, 2, 3]);     // → int[3]
-Demo.Process([]);            // → int[0]
-Demo.Process(null);
-```
+多维数组可用 `zents.new_mdarray_by_spec(elementType, lowbounds, sizes)` 创建；下标按各维 CLR lower bound 检查，length 为总元素数。
 
-稀疏数组 / 类数组 plain object → **throw**。`params T[]` 亦为 **单实参槽**，**不**多实参隐式收集。
+## 字节
 
-## 与 JS Array / 字节互转
+默认 byte[] 与其他数组一样是 wrapper。对 byte[] 槽位标注 `JsMarshalType.Bytes` 后，双向使用**复制的 Uint8Array**，不是 UTF-8 或八位 string，也不是共享 WASM 内存。
 
-```javascript
-const t = zents.to_array(arr);   // JS Array，0 基；t[i] ↔ arr.get(i)
+`zents.to_bytes` 显式复制 blittable CLR 数组的原始字节，当前包含可接受的多维数组；拒绝 bool、char、引用元素和含引用 struct。二进制布局受类型、端序和平台 ABI 影响，不应当作跨平台网络协议。
 
-// blittable 元素 → 原始字节拷贝（Uint8Array 或 binary string，以实现为准）
-const bytes = zents.to_bytes(floatArr);
-```
+## params 和 byref
 
-`to_bytes` 要求元素 blittable（基元或无引用字段的 struct）；**不接受** `bool[]` / `char[]` / 含引用字段。细则见 [05-LIB](/docs/spec/05-LIB/)。
+普通方法/构造的 params 支持尾部 0..N 个展开值，或一个匹配 CLR 数组 wrapper。传入 JS Array 时通常使用 `...values` 显式展开；delegate/GetFunction 不做 params 展开。
 
-## 多维数组
-
-```javascript
-const IntMatrix = zents.make_mdarray_type(zents.types.int32, 2);
-const matrix = zents.new_mdarray_by_mdarray_type(
-  IntMatrix,
-  [0, 0],    // lowbounds
-  [3, 4]     // sizes
-);
-// mdarray：JS→C# 仅接受 exotic / null，不接受 JS Array
-// 用 get/set / GetLength 等；arr.length 为各维长度之积
-```
-
-## typeArg
-
-`zents.types.int32`、`zents.get_type_from_name("System.Int32")`、已解析类型对象、`make_*_type` 返回值均可作为元素类型实参。更多见 [zents 标准库](/docs/guides/zents-lib/)。
-
-## `byte[]` 与 Bytes
-
-默认同 szarray。若需 octet ↔ JS `string`，标 `[JsMarshalAs(Bytes)]`（见 [JsMarshalAs](/docs/guides/js-marshal-as/)）。
-
-## 常见错误
-
-| 现象 | 处理 |
-|------|------|
-| `arr[0]` 无效 | 使用 `get` / `set` |
-| 数组越界 | 使用 `0 .. Length-1` |
-| 稀疏 Array 传入 | 填满索引；无 holes |
-| mdarray 传 JS Array | 只传 exotic |
-| `to_bytes` 失败 | 元素非 blittable |
-
-## 相关文档
-
-- [数组 Marshal](/docs/spec/marshal/07-ARRAY/)
-- [zents 库规范 · 数组](/docs/spec/05-LIB/)
-- [泛型](/docs/guides/generics/)
-- [JsMarshalAs](/docs/guides/js-marshal-as/)
+ref/in 使用输入，out 不占 JS 输入；只有 out 进入返回元组。原地修改数组元素可见，ref 对数组引用重新赋值不会重新绑定 JS 局部变量。参见[数组规范](../spec/marshal/07-ARRAY.md)。

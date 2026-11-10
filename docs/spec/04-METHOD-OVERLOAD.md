@@ -3,7 +3,7 @@ sidebar_position: 4
 title: "方法重载"
 ---
 
-> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
+> 本页定义当前互操作契约；平台验收范围与已知限制见[对齐状态](/docs/spec/03-ALIGNMENT/)。
 
 # 04 — 方法重载
 
@@ -104,7 +104,7 @@ XML **仅对 AOT 程序集有效**，在 Editor 初始化或 Generate 时消费�
 
 ## 6. 运行时辅助
 
-精确访问用全签名键；稳定短名用 Attribute/AOT XML；需要泛型方法 closure 用 `zents.inflate`。目标 API 不提供 `register_method` 或以已有 closure 为输入的 `make_generic_method`。过渡包中仍存在的旧接口不构成目标兼容承诺。
+精确访问用全签名键；稳定短名用 Attribute/AOT XML；需要泛型方法 closure 用 `zents.inflate`。当前已移除 `register_method` 和以已有 closure 为输入的 `make_generic_method`，不提供兼容回退。
 
 ## 7. this 绑定
 
@@ -129,4 +129,4 @@ const [ok, value] = Demo.TryGet(7);
 
 ## 10. 实现状态
 
-P1 只完成边界重构，仍保留旧重载/params/out 规则。上述变化安排在 P3，须同步声明与测试，见 [对齐状态](./03-ALIGNMENT.md)。
+上述重载、params、out、泛型与声明生成已实现，并纳入 Editor/Player 对照测试；具体平台范围见 [对齐状态](./03-ALIGNMENT.md)。

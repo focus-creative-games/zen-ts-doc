@@ -3,7 +3,7 @@ sidebar_position: 3
 title: "类型系统"
 ---
 
-> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
+> 本页定义当前互操作契约；平台验收范围与已知限制见[对齐状态](/docs/spec/03-ALIGNMENT/)。
 
 # 02 — 类型系统
 
@@ -418,7 +418,7 @@ Service.Take(value);
 Service.Take(null);
 ```
 
-Nullable\<long/ulong\> 的默认有值仍为 number；本轮 BigInt 合法集合不自动扩展到整个 Nullable\<T\> 槽。C# nullable 引用注解不等于 System.Nullable\<T\>。
+Nullable\<long/ulong\> 的默认有值仍为 number；BigInt 合法集合不自动扩展到整个 Nullable\<T\> 槽。C# nullable 引用注解不等于 System.Nullable\<T\>。
 
 ### 3.7 struct
 
@@ -498,7 +498,7 @@ demo.remove_ValueChanged(handler);
 |------|----------|
 | class / struct | `new Type(...)` → `[[Construct]]`；struct 另有 `Type._default()` |
 | enum | **无**；`zents.box` |
-| Nullable\<T\> | `N(...)` 或 `new N(...)` → element `T` 的值；null 用 `null` |
+| Nullable\<T\> | `N(...)` → element `T` 的值；无值用 `null`，不承诺 new 返回 primitive |
 | 抽象类 / 接口 | 无 public 构造则 construct throw |
 
 - 构造 **不参与继承**；仅用 **当前类型** 声明的 public 实例构造函数
@@ -595,7 +595,7 @@ const x = matrix.get(0, 1);
 
 | API | 说明 |
 |-----|------|
-| `zents.to_bytes` | blittable 元素 szarray → 按内存字节拷贝为 复制的 `Uint8Array`（拒绝 bool[]、char[] 和含托管引用的元素） |
+| `zents.to_bytes` | 合法 blittable CLR 数组（含支持的 mdarray）→ 复制的 `Uint8Array`；拒绝 bool[]、char[] 和含托管引用元素 |
 | `zents.to_array` | szarray → JS `Array`（0..n-1 连续索引） |
 
 ---
@@ -672,7 +672,7 @@ const Inner = CSharp.AC['MyGame.UI.Outer+Inner'];
 | 主题 | Il2Cpp | Mono |
 |------|--------|------|
 | 类型懒加载 | `TypeRegistry` | `JsMonoAppDomain` / MetaBinding |
-| `csharp:` 虚拟模块 | `JsLoader` 拦截 + `JS_NewCModule`（或等价） | 同等：`JS_SetModuleLoaderFunc` 链，**先于** 宿主 `moduleLoader` |
+| `csharp:` 虚拟模块 | 保留模块解析器拦截并合成 | 保留模块解析器合成，**先于** 业务 `moduleLoader` |
 | 三表 indexer | `MetaBinding` / `Dispatch*` | exotic internal slots + JS 回调 |
 | 继承扁平 | `MetaBinding::EnsureBinding` | `MetaBinding.cs` |
 | 数组 get/set | `ArrayMarshal` + instance map | 等价绑定 |
@@ -688,4 +688,4 @@ const Inner = CSharp.AC['MyGame.UI.Outer+Inner'];
 
 Alias、MarshalAs、Extension XML 仅适用于 AOT 程序集，在初始化/Generate 消费；不支持运行时注册、热更新或 Reload。热更新程序集使用 Attribute。
 
-以上为目标设计；当前 P0/P1 状态以 [对齐状态](./03-ALIGNMENT.md) 为准。
+以上规则由当前双后端实现；平台验收范围以 [对齐状态](./03-ALIGNMENT.md) 为准。

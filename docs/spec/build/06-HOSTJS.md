@@ -1,64 +1,64 @@
 ---
 sidebar_position: 6
-title: "HostJs 与小游戏"
+title: "HostJs、WebGL 与微信小游戏"
 ---
 
-> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
+# HostJs、WebGL 与微信小游戏
 
-# 构建 — HostJs
+## 1. 后端与目标
 
-## 1. 目标与当前状态
+WebGL/微信直接使用平台 JS VM，WASM 内没有 V8/QuickJS。复用同一 EngineApi、CLR 类型、绑定计划、重载和 Marshal 内核；变化集中在传输、模块和平台启动。
 
-WebGL 与微信等小游戏直接使用平台已有 JS VM，WASM 内不再放 QuickJS 或 V8。使用相同 CLR 类型、绑定计划、重载和 Marshal 规则，新增的是 JS↔WASM 值传输及模块/平台适配。
+目标明确匹配 WebGL 或 WeixinMiniGame，不使用“名字包含 MiniGame”的泛匹配。C# 分支包含 UNITY_WEBGL、明确微信宏和 ZENTS_HOST_JS；Editor 始终选择原生 V8。已支持团结引擎，微信小游戏目标使用同一 HostJs 内核和对应构建流程。
 
-**当前 P1 只完成公共引擎边界。** 嵌入包的 HostJs GetFunction 与通用 dispatch 等仍为原型/桩；旧文档关于 quickjs.h 垫片、完整模块运行时和 P4 已验收的描述不能作为实现事实。HostJs 完整实现与 WebGL 回归在 P4，微信真机发布在 P6。
+## 2. 同步调用协议
 
-## 2. 目标选择
+JS/WASM 默认同线程同步往返，使用自有 16 字节值及 HostOperation 二进制协议，不用 JSON/ccall 原型。参数、receiver、结果与错误均有独立调用帧，支持嵌套重入。
 
-由明确的 BuildTarget/SDK 适配与产物 manifest 选择 HostJs，同步托管分支、native 编译和 JS bundle。不能仅凭目标名包含 MiniGame 判定全部小游戏，也不能只在已经开始构建的 preprocess 阶段修改 define 后假定本次 C# 已用新分支编译。
-
-Unity 2022.3.x WebGL 与团结小游戏均为目标；需要分别验收实际 SDK 接口和 glue。当前 ZENTS_HOST_JS 只是过渡选择标记，不表示支持矩阵已经完成。
-
-## 3. 同步调用帧
-
-JS 与 Unity/WASM 逻辑默认在同一线程/可同步调用环境。JS wrapper 批量编组参数后进入 WASM，内核根据绑定 ID 与计划完成匹配/调用，再编组返回或错误。正式通用路径采用 tagged slot/二进制帧，不能依赖 JSON 表达所有值。
-
-| 值 | 传输要求 |
+| 值 | 规则 |
 |---|---|
-| number/boolean/null/undefined | 各有独立 tag，不合并空值 |
-| 默认 Int64/UInt64 | 按 number 契约，允许约定的精度损失 |
-| 显式 BigInt Int64/UInt64 | 完整整数负载，可用 64 位位模式或拆分槽；不能先经 double |
-| 字符串 | UTF-8 指针及长度，保留内嵌零 |
-| CLR/JS 对象与 callable | 句柄、所有者及 generation |
-| bytes | 明确长度和复制/借用所有权，默认复制 |
-| out/UnpackedValues 结果 | 按统一逻辑结果槽编码，区分元组与其嵌套成员数组 |
+| number、boolean、null、undefined | 独立 tag，不合并空值 |
+| 默认 long/ulong | number，允许约定精度损失 |
+| 显式 BigInt long/ulong | 完整整数负载，不先经 double |
+| 字符串 | UTF-8 指针和长度，保留内嵌零与非 BMP 字符 |
+| CLR/JS 对象与函数 | 所有者、句柄与 generation |
+| Bytes | 明确长度与复制所有权 |
+| out/UnpackedValues | 保留元组及嵌套数组层次 |
 
-每次重入需要独立参数/结果帧；不能用单一全局 scratch buffer。WASM 内存增长后重新取得 TypedArray view，不能长期缓存失效 heap view。目标是减少跨界次数，但用户 getter、代理和 callback 仍可能导致额外调用，不承诺所有场景只跨一次。
+WASM 内存增长后刷新 TypedArray view；UTF-8 适配覆盖无 TextDecoder 宿主、BOM、非法序列替换和内嵌零。不能长期复用失效 heap view 或共享单一 scratch frame。
 
-## 4. 引用与 GC
+## 3. GC 与 Reset
 
-句柄带 generation，释放和 Reset 后拒绝旧 wrapper；复用槽不能让旧 token 指向新对象。JS wrapper 保活 CLR GC root，CLR delegate 保活 JS 函数引用。
+需要 Proxy、BigInt、WeakRef、FinalizationRegistry。缺少弱引用能力时明确失败，没有使用永久强引用表伪装弱引用的降级路径。
 
-宿主有 WeakRef/FinalizationRegistry 时可用于辅助回收；不能要求 GC 立即执行，也不能在缺少它们的平台假装具备等价自动回收。能力不足时采用显式释放/受控作用域并在支持矩阵声明。事件与双向强引用环需要注销或 Dispose/Reset。
+wrapper 保活 CLR 根，CLR delegate 保活 JS 函数。FinalizationRegistry 只排队，Unity 帧泵执行根释放；不得要求 GC 立即回收。句柄和 generation 防止槽复用后旧 token 指向新对象。
 
-## 5. 模块加载
+Reset 重建 ZenTS 模块实例、缓存和句柄代次，不销毁平台全局 VM。业务直接注册的 wx 事件/定时器需要主动解除，跨 GC 强引用环也需要取消订阅。
 
-使用构建工具解析 ESM 并产生 bundle/可重建模块注册表，构建期生成 csharp: 模块。所需模块预加载完成后开放同步 GetFunction；不能在同步 CLR callback 中等待网络。
+## 4. 静态模块工厂
 
-不以 eval/new Function 或运行时正则改写完整 ESM 为依赖。支持的 import/export、循环依赖和 live binding 范围由实际构建器与测试确定；动态 import/顶层 await 未验收时须明确拒绝或在构建期诊断，不能伪造已 fulfilled 的 Promise。
+构建器用 esbuild 解析 ESM、合成 csharp: 并输出 CommonJS 工厂注册表；内置门面和业务模块都不依赖运行时 eval/new Function/with。启动同步 CLR 入口前必须预加载所需 bundle/分包。
 
-Reset 须重建 ZenTS 模块实例，不能只清空 C# 缓存却继续复用宿主原生 ESM 的旧单例。不能销毁 wx/浏览器全局 VM；域外副作用须明确管理。
+明确拒绝 dynamic import、import.meta，顶层 await 由当前 CommonJS 构建诊断拒绝。不能以伪造 fulfilled Promise 声称支持。支持的 import/export 与循环/live binding 依构建结果和测试确定。
 
-## 6. Promise、线程与平台能力
+loader/Reset 的源码变体须预编入产物，不能任意下载新源码执行。源码键使用 UTF-16 hex 编码保持转换前后身份，避免微信转换器对日志字符串重写破坏匹配；源码不匹配时硬失败，不能仅按模块名兜底。
 
-使用宿主 Promise/微任务系统；WASM 调用结束后的 job 时序与 Native checkpoint 规则按可观测行为对齐，不要求相同内部队列。旧 generation 的 callback 不得重新进入新域，Opaque 不能跨 await 使用。
+## 5. Promise 和线程
 
-Worker 是异步扩展能力，不能默认为支持同步 GetFunction/CLR 任意重入。平台 wx API 可以由宿主脚本直接调用，不要求全部先绕 C# SDK。
+使用平台 Promise/微任务，按可观察行为与 native checkpoint 对齐；不建立竞争队列或让同步 GetFunction 自动 await。旧 generation callback 不进入新域，Opaque 不跨 await。
 
-## 7. 发布适配
+当前为单线程构建；worker 不具备默认同步 CLR 重入能力。wx API 可直接在平台脚本使用，不因此在 Editor V8 出现。
 
-适配器负责 Unity/团结产物接线、导出保留、JS bootstrap、bundle/分包就绪、source map 和错误上报。AOT XML 在 Generate 烘焙，不在小游戏下载或重载 XML。最终包中没有内嵌引擎副本。
+## 6. 微信构建集成
 
-## 8. 验收
+使用官方转换 SDK，可选依赖，不影响普通项目编译。`ZenTS/Build WeChat Mini Game` 或 `ZenTS.Editor.WeChatBuild.RunBatch` 通过反射调用 `WXConvertCore.DoExport(true)`。
 
-先通过真实浏览器 WebGL 的双向互操作矩阵，再验证微信开发者工具与真机。至少包括返回/异常、重入、out/BigInt、struct/写屏障、数组、委托身份、Opaque 失效、Reset、资源就绪和内存增长。编译成功、函数能 ping 或旧 Win64 通过均不能替代这些验收。
+正常构建保留开发者的分包/CDN/开发设置，并恢复临时修改的模板、图形、异常、线程及 codegen 配置。HostJs 要求单线程和完整异常；支持 OptimizeSize 下的 fully shared generic delegate ABI。GTAP 检查 invoker 的可用性，不能只检查 methodPointer。
+
+ZENTS_WECHAT_APPID、ZENTS_WECHAT_OUTPUT、ZENTS_NODE 可配置构建；ZENTS_WECHAT_ACCEPTANCE=1 仅用于验收自包含开发包。验收器复制产物到 Library 后注入带 run ID 的临时日志收集，不进入正常发布包；连接失败不能记为测试成功。
+
+## 7. 验收范围
+
+Chrome WebGL 和微信开发者工具当前为 434 个命名用例通过、1 个托管工作线程用例显式跳过，Smoke 10/10、TS 3/3。另有实际 GC/Reset、Unicode、内嵌零、throw undefined 与共享泛型桥测试。详见[对齐状态](../03-ALIGNMENT.md)。
+
+微信验收采用 Unity 2022.3.62f3、SDK 202610200817、开发者工具 2.01.2510260、基础库 3.17.6；官方 SDK 提交 `915d4bf4f60ef0cd1c29316a8d67257185d609a7`。团结引擎微信小游戏目标同样受支持。上述微信验证范围不包含手机真机和上传发布，也不扩大到其他小游戏平台。

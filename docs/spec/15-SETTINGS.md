@@ -3,40 +3,39 @@ sidebar_position: 15
 title: "Settings"
 ---
 
-> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
+# Settings
 
-# 15 — Settings
+配置保存于 `ProjectSettings/ZenTS.asset`，对应 `ZenTS.Settings`。本页列出源码初值；已有项目资源的持久值可能不同，迁移逻辑不会把所有用户设置重置。
 
-本页规定目标配置和当前过渡字段的边界。配置资源为 ProjectSettings/ZenTS.asset；Project Settings 的编辑项应在保存时持久化。本文序号保留现有 14-TYPESCRIPT 路由，语义对应 ZLua 的 Settings 分册。
+## 1. 当前字段
 
-## 1. 目标字段
-
-| 字段/类别 | 目标默认与含义 |
+| 字段 | 新配置默认值与含义 |
 |---|---|
-| enable | true，启用 ZenTS 安装/构建接线 |
-| marshalAsXmlPaths | 空数组，AOT MarshalAs XML 文件或目录 |
-| jsAliasXmlPaths | 空数组，AOT Alias XML 文件或目录 |
-| jsExtensionXmlPaths | 空数组，AOT Extension XML 文件或目录 |
-| enableUnityOptimizations | true，Unity API 优化总开关；当前实现尚未加入 |
-| TypeScript 检查/声明程序集 | 使用现有 TS 设置，检查与 emit 不替代运行时/AOT 验证 |
-| 调试器 | 默认关闭；Native V8 Inspector 或 HostJs 平台工具，见调试器分册 |
+| enable | true；启用安装/构建接线 |
+| enableUnityOptimizations | true；包内 Unity Alias/MarshalAs 规则 |
+| enableTsPlayGate | true；进入 Play 前 TS 检查与过期 emit |
+| typescriptBindingAssemblies | Assembly-CSharp、ZenTS.Tests；业务按需配置绑定程序集 |
+| enableJsDebugger | false；Editor 调试 |
+| debuggerHostTypeName | 空；选择内置 V8 Inspector，非空指定自定义宿主 |
+| debuggerPort | 9230 |
+| debuggerWaitForAttach | false；开启后阻塞主线程等待协议继续 |
+| debuggerSourcePaths | 空数组；自定义调试宿主额外搜索路径 |
+| marshalAsXmlPaths | Assets/CustomJsMarshalAsRules.xml |
+| jsAliasXmlPaths | Assets/CustomJsAliasRules.xml |
+| jsExtensionXmlPaths | Assets/CustomJsExtensionRules.xml |
 
-当前包的 XML 路径初值可能是示例文件；目标配置与实际迁移状态见 [03-ALIGNMENT.md](./03-ALIGNMENT.md)。不能只改文档就认为字段默认已更换。
+XML 字段可配置文件或目录；示例路径默认存在于设置不等于项目必定存在对应文件。内置源码服务限定 TsProject，不因 sourcePaths 任意开放文件。
 
-## 2. XML 有效范围
+## 2. 生效时机
 
-三类 XML **只对 AOT 程序集有效**，热更新程序集使用 Attribute。Editor 新会话初始化读取 AOT 配置快照；Player Generate 将配置烘焙成表。运行期间没有注册、热更新、Reload，也不通过 Reset 重新加载 XML。
+XML 仅 AOT 程序集有效：Editor 初始化建立快照，Player Generate 烘焙表。热更新程序集使用 Attribute，不支持 XML 运行时注册、热更新、Reload，Reset 不重新读 XML。
 
-修改路径、XML 或 Unity 优化开关后，应重新初始化编辑会话；Player 重新 Generate/构建。不能把编辑期修改配置的流程命名为“运行时热更新”。
+Unity 优化开关开启时，包内 Alias/MarshalAs XML 排在用户路径前。重复同槽配置失败，不允许后加载静默覆盖；不同方法同 Alias 可以形成重载组。Attribute 优先于合法 XML，非法规则仍须校验。
 
-## 3. 加载顺序与重复
+修改配置后重新建立 Editor 会话；影响 Player 的内容重新 Generate/构建。调试器设置在下一次域初始化生效，启用设置本身不启动服务。
 
-Unity 优化开关打开时，包内 Alias/MarshalAs XML 在用户路径之前加载。同一目标配置槽在两份 XML 中重复必须失败；先加载不等于允许后者静默覆盖。不同方法最终 Alias 名相同可以形成重载组，不能与“同一槽重复配置”混淆。
+## 3. 后端与 SDK
 
-Attribute 优先于相应合法 XML。MarshalAs 的非法 Attribute 回退/非法 XML 硬失败遵循其分册，不能利用来源优先级跳过 XML 校验。
+无 QuickJS 字段、插件或回退路径。原生 V8 版本由锁定源码、SDK manifest 和指纹决定；HostJs 版本来自平台 VM。当前域不允许任意切换引擎。
 
-## 4. 引擎版本与过渡字段
-
-Native V8 的版本由匹配的二进制 manifest/revision 决定，HostJs 由平台 VM 决定。诊断显示实际 backend 和产物版本，不允许在活跃域任意切换。
-
-quickjsVersionId、QuickJS 插件/Define 和现有 debuggerHostTypeName 等是当前过渡实现字段；后续替换时显式迁移并清理，不作为长期多引擎回退设置。完整 V8 shipping revision 尚待 P2 选定并验证。
+SDK 和安装器的状态独立于脚本设置：Library 缓存、Assets 插件和原生链接必须匹配实际平台。已加载插件更新需重启 Editor。见[版本与构建](11-MULTI-VERSION.md)。

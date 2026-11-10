@@ -3,7 +3,7 @@ sidebar_position: 2
 title: "JsMarshalAs 与策略合法集合"
 ---
 
-> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
+> 本页定义当前互操作契约；平台验收范围与已知限制见[对齐状态](/docs/spec/03-ALIGNMENT/)。
 
 # `[JsMarshalAs]` 与 `JsMarshalType`
 
@@ -11,7 +11,7 @@ title: "JsMarshalAs 与策略合法集合"
 
 参数、返回值、字段、属性以及合法的非泛型 class/struct 类型级可标注。方法本身不可直接标注。类型级规则不能作用于开放泛型定义；成员规则可以挂开放声明，在闭合后根据实际 CLR 槽位校验。
 
-以下是目标枚举，数字保持旧值，只在尾部新增：
+以下为当前枚举，数值属于配置兼容契约：
 
 ```csharp
 public enum JsMarshalType
@@ -67,7 +67,7 @@ public sealed class JsMarshalAsAttribute : Attribute
 | bool/char/8、16、32 位整数/浮点 | 无，只有 Default |
 | Int64/UInt64 成员槽位 | BigInt |
 | IntPtr/UIntPtr | 无，只有 Default；不会自动采用 BigInt |
-| string | Object、OpaqueValue；本轮不定义 string 的 Bytes 对偶 |
+| string | Object、OpaqueValue；不定义 string 的 Bytes 对偶 |
 | byte[] | Object、Bytes、OpaqueValue、返回值 ActualTypeUserData |
 | 其他数组/class/interface/object | Object、OpaqueValue、返回值 ActualTypeUserData |
 | struct | Object、OpaqueValue、Table、UnpackedValues |
@@ -135,4 +135,4 @@ Param 使用 CLR 声明参数的零基 index，不按 JS 展开槽重新编号�
 
 ## 10. 实现状态
 
-ActualTypeUserData 和 BigInt 为目标新增策略，P1 的实际枚举尚未实现它们。P3 必须同步 C# 枚举、XML parser、Mono/Il2Cpp writer、重载判定和 TS 声明后再宣称可用。
+ActualTypeUserData 和 BigInt 已在枚举、XML parser、Mono/IL2CPP writer、重载判定及 TS 声明中接入；支持位置仍严格限制，平台范围见对齐状态。

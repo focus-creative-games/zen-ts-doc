@@ -1,94 +1,53 @@
 ---
 sidebar_position: 1
-title: 安装
-description: UPM 引入 ZenTS，选定 QuickJS pin 并完成本地 Install。
+title: "安装与原生 SDK"
 ---
 
-# 安装
+# 安装与原生 SDK
 
-使用指南从本页开始：先装好包、确认 Settings，再进入 [Hello 互操作](/docs/guides/hello-interop/)。UPM 细节与 Demo 路径见 [入门 · 安装与集成](/docs/getting-started/installation/)。
+ZenTS 支持 Git URL 安装和嵌入式 package。Unity 将 Git 包放入只读 `Library/PackageCache` 是正常情况；安装和构建不会要求修改该目录。
 
-## 你要完成的三件事
+## 安装步骤
 
-1. 在工程中引入 `com.code-philosophy.zen-ts`
-2. 菜单 **`ZenTS/Settings...`**（或 Project Settings → **ZenTS**）确认 **QuickJS** 版本 id
-3. 菜单 **`ZenTS/Install...`** 生成本地 `libil2cpp` + QuickJS + `zents-runtime` 树（出 Il2Cpp Player 前必需）
+1. 通过 Package Manager 安装 `com.code-philosophy.zen-ts`，或将源码放入 `Packages/com.code-philosophy.zen-ts`。
+2. 为当前 Editor 的 OS/CPU 构建或导入完整 V8 SDK。
+3. 等待 Editor 插件和 `.meta` 自动生成；若旧插件已加载，重启 Editor 激活新版本。
+4. 执行 `ZenTS/Install...`，安装项目本地的 IL2CPP 运行时和补丁。
+5. 初始化 TypeScript 工程，配置绑定程序集，执行 `ZenTS/Generate Xml Bindings` 和 `ZenTS/Generate Typings`。
 
-:::warning
-包内 **不** 携带完整 `libil2cpp`。未 Install 时 Il2Cpp 构建会失败；**`ZenTS/Generate/All`** 也依赖本地树已存在。
-:::
+包路径通过 Unity `PackageInfo.resolvedPath` 解析。下面的 `<工具目录>` 指该路径下的 `ZenTS~/v8`，不要在脚本里硬编码 PackageCache 的哈希目录。
 
-## 1. 引入 Package
+## Windows SDK
 
-编辑 `Packages/manifest.json`：
+V8 固定为官方原始源码 **13.6.233.17**，提交 `b0a55a7dad7f536cce1f9aaddba89894c8533946`。准备官方源码及 depot_tools 后：
 
-```json
-{
-  "dependencies": {
-    "com.code-philosophy.zen-ts": "https://github.com/focus-creative-games/zen-ts.git"
-  }
-}
+```text
+python <工具目录>/build_official.py --source <V8源码> --depot-tools <depot_tools> --out <GN输出> --export <原始SDK> --jobs 4
+python <工具目录>/build_win64.py --project <Unity项目> --sdk <原始SDK>
+python <工具目录>/import_platform.py --project <Unity项目> --sdk <Unity项目>/Library/ZenTS/NativeBuild/windows-x64/sdk
 ```
 
-也可钉版本标签。首次体验推荐直接打开 [zen-ts-demo](https://github.com/focus-creative-games/zen-ts-demo) 的 `js-demo/` 或 `ts-demo/`。
+第一步构建官方静态 V8，第二步构建 ZenTS 适配层及 Editor DLL，第三步安装完整 SDK。已有缓存后，`build_win64.py --project <Unity项目>` 可只重建适配层。也可使用 `ZenTS/Native SDK/Import SDK...` 导入完整 SDK。
 
-## 2. Settings（`ZenTS/Settings...`）
+## Apple 和 Android SDK
 
-打开 Project Settings → **ZenTS**（写入 `ProjectSettings/ZenTS.asset`）。
+```text
+python <工具目录>/build_platform.py --package <解析后的包目录> --source <V8源码> --out <GN输出> --export <完整SDK> --target <macos|ios|ios-simulator|android> --cpu <arm64|x64>
+python <工具目录>/import_platform.py --project <Unity项目> --sdk <完整SDK>
+```
 
-| 字段 | 说明 |
-|------|------|
-| **QuickJS Version Id** | 如 `quickjs-2026-06-04`；须与包内 `ZenTS~/quickjs-il2cpp/VERSION` 一致 |
-| **TypeScript Play 闸门** | 默认开启；进 Play 前跑 `tsc --noEmit`（见 [TypeScript 工作流](/docs/guides/typescript-workflow/)） |
-| **JS Debugger** | 默认关闭；仅 Editor Mono，见 [JS 调试器](/docs/guides/js-debugger/) |
+Apple 构建需要 macOS/Xcode；Android 在 Linux 构建并提供 `--ndk <NDK路径>`。iOS 使用 JITless。SDK 必须匹配 OS、CPU、来源版本、编译选项和适配层源码；不能把模拟器库用于设备。
 
-ZenTS **仅** 支持 QuickJS，**没有** 多引擎切换矩阵。改 pin 后须重新 **Install**，并按 Console 提示 **重启 Editor**。平台矩阵见 [兼容性](/docs/getting-started/compatibility/)；细则见 [多版本管理](/docs/spec/11-MULTI-VERSION/)。
+## 文件归属
 
-## 3. 本地 Install（`ZenTS/Install...`）
-
-Install 主要工作：
-
-1. 复制 Editor 的 stock `libil2cpp` 到 `Library/ZenTS/LocalIl2CppData-…` 并打 patch
-2. 将包内 `ZenTS~/zents-runtime` 复制到本地 **`libil2cpp/zents`**
-3. 将 **`ZenTS~/quickjs-il2cpp`** 整目录拷贝到 **`libil2cpp/quickjs`**
-4. 写入 scripting define、`ZenTSConf.inc` 等并校验
-
-缺 Editor `Plugins/quickjs/quickjs.dll` 时 Install **警告、不失败**；需自行放入后再重启 Editor。
-
-## 4. 脚本目录（先搭好，下一篇会用到）
-
-| 模式 | Editor 权威源 | Player |
-|------|---------------|--------|
-| **纯 JS** | 工程旁 `JsScripts/*.js`（或 Loader 约定路径） | 常拷贝到 `StreamingAssets/Js/` |
-| **TypeScript** | 工程根 `TsProject/src/**` → emit 到 `TsProject/out/**` | 构建拷贝到 `StreamingAssets/ZenTS/` |
-
-TypeScript 工程执行菜单 **`ZenTS/Init TypeScript Project`** 生成脚手架。目录与 Sync 见 [安装与集成](/docs/getting-started/installation/)、[构建](/docs/guides/build/)。
-
-## 验证
-
-1. 菜单出现 **ZenTS/**（Install、Generate、Init TypeScript 等）
-2. Install 日志成功；工程能编译
-3. 下一篇用 `JsAppDomain.Initialize` + 最小互调确认 Play 有输出
-
-## 常见问题
-
-| 现象 | 处理 |
-|------|------|
-| Package 拉取失败 | 检查 Git / 网络；或改用本地 `file:` |
-| 提示未 Install | 执行 `ZenTS/Install...`；换 Unity / 换 QuickJS pin 后重跑 |
-| 缺 `quickjs.dll` | 按 [QuickJS 构建](/docs/spec/build/01-QUICKJS/) 放入 Plugins；重启 Editor |
-| 换 pin 后异常 | 重跑 Install，并 **重启 Editor** |
-
-## 学习路径
-
-| | |
+| 目录 | 内容与维护方式 |
 |---|---|
-| **上一篇** | [快速开始](/docs/getting-started/quick-start/) |
-| **下一篇** | [Hello 互操作](/docs/guides/hello-interop/) |
+| package | 版本锁、源码、工具和源码 `.meta`；可只读 |
+| `Library/ZenTS/NativeSDK/<指纹>/<target>` | 校验后安装的不可变 SDK |
+| `Library/ZenTS/NativeBuild` | 本机构建工作目录 |
+| `Assets/ZenTSGenerated/Native/<target>` | Editor 插件和自动生成的稳定 GUID `.meta` |
+| `Library/ZenTS/LocalIl2CppData-<Editor平台>` | 项目本地 IL2CPP、补丁及生成代码 |
 
-## 相关文档
+生成的原生二进制和 Native 元数据不提交 Git；源码文件的 `.meta` 正常提交。删除 Library 后需要重新导入 SDK，Assets 中残留的插件不能代替 SDK 校验。可用 `ZenTS/Native SDK/Repair Editor Plugins` 修复缺失插件。团队可在 CI 构建、分发完整 SDK，每个项目独立导入。
 
-- [入门 · 安装与集成](/docs/getting-started/installation/)
-- [兼容性](/docs/getting-started/compatibility/)
-- [多版本管理](/docs/spec/11-MULTI-VERSION/)
-- [QuickJS 构建](/docs/spec/build/01-QUICKJS/)
+[安装概览](../getting-started/installation.md) · [平台支持](../getting-started/compatibility.md) · [构建](build.md)

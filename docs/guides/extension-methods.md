@@ -1,86 +1,35 @@
 ---
 sidebar_position: 16
-title: 扩展方法
-description: "[JsExtension] 与 XML 将 C# extension 挂到被扩展类型的实例方法表。"
+title: "扩展方法"
 ---
 
 # 扩展方法
 
-把 C# **extension methods** 挂到被扩展类型的 JS **实例** method 表，支持 `obj.ExtFoo(...)`（方法调用绑定 CLR `this`）。权威：[13-EXTENSION-METHODS](/docs/spec/13-EXTENSION-METHODS/)。
+ZenTS 将配置过的 CLR 静态扩展方法纳入目标类型的实例候选。不会自动扫描所有程序集，也不会把任意静态函数当作扩展方法。
 
-**不做**全局扫描 `ExtensionAttribute`。配置模型是：**被扩展类型 → 扩展类列表**；Bind 该类型时再反射这些扩展类。
-
-## 配置
-
-| 方式 | 用法 |
-|------|------|
-| 能改被扩展类型源码 | **`[JsExtension(typeof(FooExt), …)]` 标在被扩展类型上** |
-| 第三方 / 预编译类型 | Settings **`jsExtensionXmlPaths`** + 根元素 **`JsExtensions`** |
-
-`[JsExtension]` **不要**标在扩展类上（否则为发现扩展必须扫全程序集）。
+## Attribute 配置
 
 ```csharp
 using ZenTS;
-
-public static class TransformExt
+[JsExtension(typeof(CounterExtensions))]
+public sealed class Counter
 {
-    public static void ResetLocal(this UnityEngine.Transform t)
-    {
-        t.localPosition = UnityEngine.Vector3.zero;
-    }
+    public int Value;
 }
-
-[JsExtension(typeof(TransformExt))]
-public class PlayerView : MonoBehaviour { }
+public static class CounterExtensions
+{
+    public static int Plus(this Counter self, int amount) => self.Value + amount;
+}
 ```
 
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<JsExtensions version="1">
-  <Assembly name="UnityEngine.CoreModule">
-    <Type fullName="UnityEngine.Transform">
-      <Extension assembly="Assembly-CSharp" fullName="MyGame.TransformExt"/>
-    </Type>
-  </Assembly>
-</JsExtensions>
-```
+Attribute 放在**被扩展类型**上，参数是扩展类。脚本通过 `counter.Plus(2)` 调用，首个 CLR self 参数由 receiver 提供；提取 closure 后仍需 `.call(counter, ...)`。
 
-| 项 | 说明 |
-|----|------|
-| Attribute / XML | 同一被扩展类型取 **并集** |
-| 基类 | Bind **T** 时收集 **基类**上的 `[JsExtension]` |
-| Il2Cpp | XML 在 **Generate** 期写入静态表，Player **不**读 XML（改完须重新 Generate） |
-| 扩展类无法解析 | Generate **硬失败**；Mono **throw**（不静默丢） |
+## AOT XML
 
-本文件 **只**允许 `Assembly` → `Type` → `Extension`；不要写入 `Method` / `MarshalAs` / `alias`。与 [JsAlias](/docs/guides/js-alias/) XML **分文件、分 Settings 字段**。
+对不能修改源码的 AOT 类型，在 `Settings.jsExtensionXmlPaths` 配置扩展规则。XML 根为 `JsExtensions`，完整结构和泛型绑定约束以[扩展规范](../spec/13-EXTENSION-METHODS.md)为准。不要创建运行时注册表或依赖 XML 热更新。
 
-## JS 用法
+## 竞争规则
 
-```javascript
-const t = go.transform;
-t.ResetLocal();   // 方法调用；底层是静态扩展方法
-```
+扩展方法需要合法的静态方法、self 参数和可赋值关系，泛型定义需要可验证的闭合路径。原生成员和扩展方法按统一规则参与绑定和重载；同名不表示后加载者覆盖前者。
 
-筛选规则：扩展类上带 `ExtensionAttribute` 的 `public static` 方法，且第一个参数能接住该被扩展类型（含 `this Base` 用于 `Derived`）。开放泛型扩展 **不支持**。
-
-调用语义为 **static-as-instance**：进 **IEO method 表**；JS 方法调用的 receiver → CLR 第 0 参（`this`）。**不**挂到被扩展类型的静态表冒充「已支持 extension」。
-
-## 与实例方法同名
-
-扩展与真实例 **合并竞争**（同一 overload 组），**无**「实例优先」。消歧用全签名键或 `[JsAlias]`。见 [方法重载](/docs/guides/overloads/)。
-
-## 常见错误
-
-| 现象 | 原因 |
-|------|------|
-| `member not found`（`obj.Foo`） | 未在被扩展类型（或基类）配置扩展类；或 Il2Cpp 未重新 Generate |
-| 只能 `Ext.Foo(obj)` | 未走 static-as-instance / 未进 IEO（实现须符合规范 §4） |
-| 调到错误重载 | 合并竞争；用全签名键或 Alias 消歧 |
-| 标在扩展类上的 Attribute 无效 | 发现只扫被扩展类型上的 `[JsExtension]` |
-
-## 相关文档
-
-- [规范 13](/docs/spec/13-EXTENSION-METHODS/)
-- [JsAlias](/docs/guides/js-alias/)（另一套 XML，勿混用）
-- [方法重载](/docs/guides/overloads/)
-- [成员绑定](/docs/spec/metatable/03-BINDING/)
+用全签名键进行精确访问时仍走受限懒解析。Alias、继承、声明门面和 ByVal/ByObj receiver 限制同时生效。IL2CPP 需要保留扩展方法代码和对应泛型/桥接实例。

@@ -3,7 +3,7 @@ sidebar_position: 2
 title: "宿主 API"
 ---
 
-> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
+> 本页定义当前互操作契约；平台验收范围与已知限制见[对齐状态](/docs/spec/03-ALIGNMENT/)。
 
 # 01 — 宿主 API
 
@@ -26,19 +26,21 @@ public static class JsAppDomain
 {
     public static void Initialize(Func<string, object> moduleLoader);
     public static void Reset(Func<string, object> moduleLoader);
+    public static void ApplyPendingResetNow();
     public static T GetFunction<T>(string jsModule, string jsExportName)
         where T : MulticastDelegate;
 }
 ```
 
-Editor 使用 Mono 宿主；Native Player 使用 Il2Cpp；WebGL/小游戏由 Il2Cpp 连接 HostJs。引擎目标是 Native V8 / HostJs；当前 P1 的实际后端见 [实现状态](./03-ALIGNMENT.md)。不公开 `Shutdown` 或让业务手工注入内部 backend。
+Editor 使用 Mono 宿主；Native Player 使用 Il2Cpp；WebGL/小游戏由 Il2Cpp 连接 HostJs。当前引擎是 Native V8 / HostJs；平台运行范围见 [实现状态](./03-ALIGNMENT.md)。不公开 `Shutdown` 或让业务手工注入内部 backend。
 
 ### 1.2 整域重置（`Reset`）
 
 | 调用 | 行为 |
 |---|---|
 | Initialize | 创建唯一脚本域并安装 loader；重复初始化抛异常 |
-| Reset | 只预约；本帧 EndOfFrame 才执行清理与重建，同帧多次预约最后一次生效 |
+| Reset | Play Mode 预约到 EndOfFrame，同帧多次最后一次生效；Editor 非播放/批处理同步应用 |
+| ApplyPendingResetNow | 主线程安全边界立即应用已预约 Reset；没有预约则无操作 |
 
 清理顺序为：处理待释放引用、失效旧 generation、拆模块/绑定/持久 JS 引用、关闭域资源，再建立新域。进程级桥接注册和 AOT 配置表不因 Reset 接受新的 XML。旧 GetFunction 委托及旧 wrapper 在 Reset 生效后必须失效。
 
@@ -46,7 +48,7 @@ HostJs 不能销毁宿主 VM；应重建 ZenTS 的模块实例、句柄表和受
 
 ### 1.3 模块加载器
 
-`moduleLoader(canonical)` 返回 JS 源码（通常 string）；兼容的 byte[] 返回必须明确为源码字节。canonical 不含 `.js`，不读取 TS。失败抛可诊断异常。`csharp:` 为保留前缀，不交给业务 loader。
+`moduleLoader(canonical)` 返回 JS 源码（通常 string）；加载器支持范围以对应后端为准，不把返回 object 扩张为任意输入格式。canonical 不含 `.js`，不读取 TS。失败抛可诊断异常。`csharp:` 为保留前缀，不交给业务 loader。
 
 Native V8 使用引擎模块接口；HostJs 将模块解析与执行适配到预构建模块包。所需 bundle/分包须先异步准备完成，不能在同步 loader 内阻塞等待网络，也不能用 `eval` 作为必须前提。详见 [14-TYPESCRIPT.md](./14-TYPESCRIPT.md)。
 

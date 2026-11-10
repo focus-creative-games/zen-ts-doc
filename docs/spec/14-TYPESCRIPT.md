@@ -3,13 +3,13 @@ sidebar_position: 14
 title: "TypeScript 工作流"
 ---
 
-> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
+> 本页定义当前互操作契约；平台验收范围与已知限制见[对齐状态](/docs/spec/03-ALIGNMENT/)。
 
 # 14 — TypeScript 工作流
 
 ## 1. 边界
 
-TypeScript 在编辑/构建阶段检查与 emit，运行时只执行 JavaScript。Native V8 与 HostJs 使用相同 CLR 语义；HostJs 额外进行模块打包/预加载。当前已存在的 Editor emit 工作流不代表 HostJs 打包已经完成。
+TypeScript 在编辑/构建阶段检查与 emit，运行时只执行 JavaScript。Native V8 与 HostJs 使用相同 CLR 语义；HostJs 额外进行模块打包/预加载。当前已接入 Editor emit 与 HostJs 构建期工厂；两者分别执行和验证。
 
 ## 2. 工程布局
 
@@ -55,7 +55,7 @@ Exact(): bigint;
 Approximate(): number;
 ```
 
-上例是声明成员片段。它描述目标生成行为，不表示当前 P1 生成器已实现 tuple/BigInt。
+上例是当前生成器的声明成员片段；tuple/BigInt 按同一槽位计划生成。
 
 ## 7. Native V8 发布
 
@@ -63,13 +63,13 @@ loader 提供 canonical 对应 JS 源码；模块编译/链接/求值交给 V8 �
 
 ## 8. HostJs 发布
 
-构建器解析 ESM、合成 csharp: 模块并输出平台可加载的包/可重建模块注册表。不能用字符串正则宣称支持完整 ESM，也不依赖运行时 eval/new Function。普通 import、循环依赖、live binding、动态 import 和顶层 await 的支持范围以构建器及实测为准，不支持的形式构建时报错或明确拒绝。
+构建器解析 ESM、合成 csharp: 模块并输出平台可加载的包/可重建模块注册表。不能用字符串正则宣称支持完整 ESM，也不依赖运行时 eval/new Function。普通 import/export、循环依赖与 live binding 依实际构建器和用例验证；当前明确拒绝 dynamic import、import.meta，顶层 await 由 CommonJS 构建诊断拒绝。
 
 分包网络加载是异步准备；准备完成后再启动依赖这些模块的同步 CLR 入口。Reset 要重建 ZenTS 模块实例，不能沿用宿主不可重置的原生 import 单例冒充新域。
 
 ## 9. 资源与平台
 
-Editor 可从 TsProject/out 读取；当前过渡 WebGL 文件发布路径中的 Resources/TextAsset 仅证明文本资源可读取，不证明文本能在宿主 VM 正确执行。正式 HostJs 的代码包、资源、source map 与小游戏分包由对应发布适配器处理。
+Editor 从 TsProject/out 读取；Android、WebGL/微信的来源可经 Resources/TextAsset 发布。HostJs 实际执行的是静态预编译工厂，文本用于来源身份匹配，不进行运行时 eval；代码包、source map 和分包由发布适配器接线。
 
 wx API 可从宿主脚本直接访问，但它不自动出现在 Editor V8。跨平台业务应经明确应用层 facade 或平台能力检测，而不是为 Editor 引入另一个不一致的 CLR Marshal。
 
@@ -77,4 +77,4 @@ wx API 可从宿主脚本直接访问，但它不自动出现在 Editor V8。跨
 
 XML 只用于 AOT 元数据在初始化/Generate 阶段的配置；生成器不能为热更新程序集输出运行时 XML 注册 bootstrap。热更新程序集从自己的 Attribute/元数据生成声明或模块描述。
 
-检查、emit、声明与 source map、默认 number/显式 bigint、out tuple、params、泛型和 bundle 加载分别验证。当前通过的三个 TS demo 只代表既有工作流，不等于新的声明/HostJs 能力已交付。
+检查、emit、声明与 source map、默认 number/显式 bigint、out tuple、params、泛型和 bundle 加载分别验证。声明生成与三个 TS demo 已纳入验收，但不等于所有 TS 语法、AOT 泛型或平台设备均已覆盖。

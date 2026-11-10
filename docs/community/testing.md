@@ -1,91 +1,34 @@
 ---
 sidebar_position: 2
-title: 测试
-description: 社区如何验证与最小复现；Editor / Player 矩阵（实用向）。
+title: "测试与验收"
 ---
 
-# 测试
+# 测试与验收
 
-> **原则：** 社区验证以 **可复现** 为准；本页不臆造未开源的内部套件细节。  
-> **正确性** 对齐各 `spec/**`；**性能基准** 暂无公开四方表（见 [选型摘要](/docs/compare/SUMMARY/)）。
+测试按 CLR 规则组织，并对比 Mono/IL2CPP 与 V8/HostJs。不能用某条执行路径通过推断所有后端，也不能以跳过本应支持的功能替代修复。
 
----
+## 计数口径
 
-## 1. 你该测什么
+当前完整列表为 **435 个命名用例**。模块运行器显示的 **56/56** 是 52 个命名测试套件模块加 4 个由 C# 驱动的支持模块，不是 56 个测试函数，也不是覆盖率百分比。Smoke 和 TS 示例单独计数。
 
-| 目标 | 建议 |
-|------|------|
-| 业务冒烟 | 在 **Editor Play** 跑通：`Initialize` → `GetFunction` → JS→C# 主路径 |
-| 发版信心 | 同一脚本在 **Il2Cpp Player** 再跑一遍（见下方矩阵） |
-| 迁移正确性 | 对照 [迁移检查清单](/docs/community/migration/#改写清单用户向)；Event / ref / strict miss 单独点测 |
-| 回归 | 把最小场景留在工程里，发版前手跑或 CI batchmode |
+| 已记录环境 | 命名用例 | Smoke | TS |
+|---|---|---|---|
+| Windows Editor / macOS arm64 Editor | 435 通过 | 8/8 | 3/3 |
+| Win64 Player | 435 通过 | 10/10 | 3/3 |
+| Chrome WebGL / 微信开发者工具 | 434 通过，1 显式跳过 | 10/10 | 3/3 |
 
-官方示例工程：[zen-ts-demo](https://github.com/focus-creative-games/zen-ts-demo)（`js-demo` / `ts-demo`）。
+HostJs 单线程构建跳过托管工作线程用例，跳过在用例入口记录，不影响其他规则执行。Android、macOS Player、iOS 模拟器已有运行验证，但尚未覆盖最新完整命名用例集。
 
----
+## 覆盖重点
 
-## 2. Editor / Player 矩阵（高阶）
+包含类型身份与门面、继承、全签名与 Alias、泛型与 params、数值范围和 BigInt、out/ref/in、数组与字节、含引用 struct、事件与委托、异常、Opaque 过期、GC、Reset、Unicode/内嵌零字符和 TypeScript 工作流。HostJs 另测实际回收、内存视图和预编译源码身份。
 
-| 维度 | Editor（Mono） | Player（Il2Cpp） |
-|------|----------------|------------------|
-| 用途 | 日常迭代、调试器、快速失败 | **发布权威**；语义与 Editor 应对齐 |
-| Generate | 日常可不每次 | **必须** `ZenTS/Generate/All` |
-| 脚本路径 | `JsScripts` / `TsProject/out` | `StreamingAssets/Js` 或 `StreamingAssets/ZenTS` |
-| 断言标准 | 同一套期望行为 | **同一套**；不要「Editor 过就算」 |
+Lua 和 JavaScript 的语言机制不同，测试应按可观察的互操作规则比较，不能以测试函数总数推断两种方案的分支覆盖率。
 
-**平台原则（实用版）：** 关键互操作路径至少覆盖 **Editor 一次 + 目标平台 Il2Cpp Player 一次**（目标可为 Win64 / Android / iOS / WebGL / 小游戏 / 鸿蒙等任一 Il2Cpp 平台，见 [兼容性](/docs/getting-started/compatibility/)）。任一端失败都视为失败，不要用「仅 Mono」当发版依据。
+## 调试与平台验证
 
-更细的双端差异：[Editor 与 Player](/docs/guides/editor-vs-player/)、[构建](/docs/guides/build/)。
+Inspector 使用真实 CDP 测试，不是仅端口探测。Windows Domain Reload 干净通过；macOS arm64 清理断言通过但退出超时仍保留为限制。团结引擎已受支持；上表中的测试计数仅对应所列环境，不代表所有引擎版本都具有相同的测试记录。手机真机、商店发布和后续 LTS 版本仍需按目标环境验证。
 
----
+## 复现要求
 
-## 3. 社区最小复现（提 Issue 前）
-
-请尽量附上：
-
-1. **Unity / 团结版本**、目标平台、ZenTS 包版本或 commit  
-2. **最小工程或补丁**：能去掉业务后仍复现的场景 / 两三个脚本  
-3. **复现步骤**：Editor 还是 Player；是否已 Install / Generate / Sync  
-4. **期望 vs 实际**：Console / Player 日志、完整异常栈  
-5. **相关片段**：JS/TS named export、`GetFunction` 签名、涉及的 C# 类型（public API）
-
-模板见 [联系方式](/docs/community/contact/#提问模板)。
-
-**不要**只说「Player 挂了」；没有路径与日志时很难定位 Generate / StreamingAssets / loader 问题。
-
----
-
-## 4. 建议的自测清单（实用）
-
-复制到项目 wiki / PR 描述即可：
-
-- [ ] Editor：`JsAppDomain.Initialize` 成功  
-- [ ] Editor：`GetFunction` 调到 named export，返回值正确  
-- [ ] Editor：`csharp:` 或 `CSharp` 调到目标类型；含 namespace 用括号键 / 带路径 import  
-- [ ] Editor：未知成员 → 抛 `zents:` 错误（strict miss）  
-- [ ] Editor：Event 用 `add_` / `remove_`，同一引用可卸  
-- [ ] （若用 TS）`tsc --noEmit` 通过；emit **未** bundle；Play 闸门符合预期  
-- [ ] Player：已 Generate；StreamingAssets 中有对应 `.js`  
-- [ ] Player：重复上述冒烟；无「仅 Editor」依赖  
-
-规范条款级用例语义以 `spec/**` 为准；内部 ZenTSTest 矩阵若未随文档开源，**以你工程内可跑通的清单为准**。
-
----
-
-## 5. 与 Demo / 规范的关系
-
-| 材料 | 用途 |
-|------|------|
-| [zen-ts-demo](https://github.com/focus-creative-games/zen-ts-demo) | 冒烟与工作流样板 |
-| [spec](/docs/category/spec/) | 行为契约；写用例时按章节对齐 |
-| [排障](/docs/guides/troubleshooting/) | 失败时的检查表 |
-| [FAQ](/docs/community/faq/) | 高频误解 |
-
----
-
-## 相关文档
-
-- [构建](/docs/guides/build/)
-- [Editor 与 Player](/docs/guides/editor-vs-player/)
-- [迁移](/docs/community/migration/)
-- [联系方式](/docs/community/contact/)
+记录源码/SDK 身份、Unity 与平台版本、命令、模块数、命名用例通过/失败/跳过和进程退出结果。原生仅 C++ 修改可复用 Win64 导出；C# 类型或生成输入改动后重新生成并导出。不要把实际运行前的静态检查当作运行通过。

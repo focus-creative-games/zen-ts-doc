@@ -3,11 +3,11 @@ sidebar_position: 5
 title: "zents 标准库"
 ---
 
-> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
+> 本页定义当前互操作契约；平台验收范围与已知限制见[对齐状态](/docs/spec/03-ALIGNMENT/)。
 
 # 05 — `zents` 标准库
 
-`zents` 为引擎无关的 JavaScript 门面。内部 `__zents_*` hook 是实现细节，不能把 QuickJS 类型或 V8 句柄写成业务 API。本文描述目标接口；当前差异见 [实现状态](./03-ALIGNMENT.md)。
+`zents` 为引擎无关的 JavaScript 门面。内部 `__zents_*` hook 是实现细节，不能把 QuickJS 类型或 V8 句柄写成业务 API。本文描述当前公开接口；验收范围见 [实现状态](./03-ALIGNMENT.md)。
 
 ## 1. 职责边界
 
@@ -65,9 +65,9 @@ GTAP 是严格子集，只接受 System.Type wrapper；不要把公共 typeArg �
 
 长度、上下界、积和分配大小要校验；参数数组为连续 JS Array。元素初始化为 default(T)，数组 wrapper 通过 get/set 访问，SZArray 提供 length。
 
-### 8.3 `to_bytes(szarray)`
+### 8.3 `to_bytes(array)`
 
-只接受 blittable 元素的 SZArray，输出**复制的 Uint8Array**，不再允许各引擎自行选择 binary string。bool[]、char[] 和含托管引用元素拒绝；遵守 [数组规则](./marshal/07-ARRAY.md)。
+接受 blittable 元素的 CLR 数组（含当前可接受的多维数组），输出**复制的 Uint8Array**，不再允许各引擎自行选择 binary string。bool[]、char[] 和含托管引用元素拒绝；遵守 [数组规则](./marshal/07-ARRAY.md)。
 
 ### 8.4 `to_array(szarray)`
 
@@ -119,4 +119,4 @@ const exact = Demo.GetExactCounter(); // CLR 返回值须显式标注 BigInt
 
 ## 14. 声明与实现同步
 
-新 API、out 元组和 BigInt 标注必须同步 zents.d.ts、csharp: 声明和 Editor/Player 用例。缺失实现要登记，不得让声明承诺未实现行为。当前过渡包仍有 make_generic_method/register_method，按迁移章节移除，不将其继续写为目标 API。
+新 API、out 元组和 BigInt 标注必须同步 zents.d.ts、csharp: 声明和 Editor/Player 用例。缺失实现要登记，不得让声明承诺未实现行为。当前已移除 make_generic_method/register_method，迁移使用 inflate 和 Bind 期 Alias。

@@ -1,36 +1,20 @@
 ---
 sidebar_position: 1
-title: 安装与集成
-description: "通过 UPM / Git URL 安装 ZenTS 包。"
+title: "安装概览"
 ---
 
-# 安装与集成
+# 安装概览
 
-## 包标识
+通过 Package Manager 的 Git URL 安装 ZenTS，或将源码嵌入 `Packages/com.code-philosophy.zen-ts`。
 
-- UPM 包名：`com.code-philosophy.zen-ts`
-- 源码仓库：[focus-creative-games/zen-ts](https://github.com/focus-creative-games/zen-ts)
+完成以下步骤后再运行脚本：
 
-## 通过 Git URL 安装
+1. 安装支持政策内的 Unity Editor 与目标平台模块。
+2. 从匹配的官方 V8 原始源码构建静态 SDK，编译 ZenTS 适配层并导入项目。Editor 也需要其 OS/CPU 对应的 SDK。
+3. SDK 自动保存在 `Library/ZenTS/NativeSDK`；Editor 插件及 `.meta` 自动生成到 `Assets/ZenTSGenerated/Native`。
+4. 运行 `ZenTS/Install...`；Player 还需 `ZenTS/Generate Xml Bindings` 、`ZenTS/Generate Typings` 及构建配置。
+5. 创建 TypeScript 工程或提供 JS loader，然后调用 `JsAppDomain.Initialize`。
 
-在 `Packages/manifest.json` 中加入：
+已加载的原生插件更新需要重启 Editor。SDK、DLL/dylib/a/lib 与生成的 `.meta` 由本地流程管理，不写回 PackageCache，也不作为 package 源码提交。
 
-```json
-{
-  "dependencies": {
-    "com.code-philosophy.zen-ts": "https://github.com/focus-creative-games/zen-ts.git"
-  }
-}
-```
-
-也可在 Unity：**Window → Package Manager → + → Add package from git URL**。
-
-## 安装后
-
-1. 确认菜单出现 **ZenTS/**（Init TypeScript Project、Generate Typings、Compile 等）。
-2. 纯 JS 工程：准备 Loader + `JsScripts/`（见 [快速开始](/docs/getting-started/quick-start/)）。
-3. TypeScript 工程：执行 **ZenTS/Init TypeScript Project**，或直接打开 [ts-demo](https://github.com/focus-creative-games/zen-ts-demo)。
-
-## Il2Cpp 说明
-
-Player 使用包内 `ZenTS~/zents-runtime` 进入 LocalIl2Cpp / 导出工程。细节见 [构建](/docs/guides/build/) 与 [QuickJS 构建说明](/docs/spec/build/01-QUICKJS/)。
+具体构建和导入命令见[安装指南](/docs/guides/install/)，首次调用见[Hello 互操作](/docs/guides/hello-interop/)。

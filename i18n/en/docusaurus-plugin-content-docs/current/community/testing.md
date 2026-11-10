@@ -1,91 +1,34 @@
 ---
 sidebar_position: 2
-title: 测试
-description: 社区如何验证与最小复现；Editor / Player 矩阵（实用向）。
+title: "Testing and validation"
 ---
 
-# 测试
+# Testing and validation
 
-> **原则：** 社区验证以 **可复现** 为准；本页不臆造未开源的内部套件细节。  
-> **正确性** 对齐各 `spec/**`；**性能基准** 暂无公开四方表（见 [选型摘要](/docs/compare/SUMMARY/)）。
+Test CLR rules across Mono/IL2CPP and V8/HostJs. A pass on one execution path does not establish every backend; unsupported-capability skips must not hide required interop failures.
 
----
+## Counts
 
-## 1. 你该测什么
+The current list contains **435 named cases**. `56/56` counts 52 named-suite modules plus four C#-driven support modules, not individual functions or coverage. Smoke and TS examples are separate.
 
-| 目标 | 建议 |
-|------|------|
-| 业务冒烟 | 在 **Editor Play** 跑通：`Initialize` → `GetFunction` → JS→C# 主路径 |
-| 发版信心 | 同一脚本在 **Il2Cpp Player** 再跑一遍（见下方矩阵） |
-| 迁移正确性 | 对照 [迁移检查清单](/docs/community/migration/#改写清单用户向)；Event / ref / strict miss 单独点测 |
-| 回归 | 把最小场景留在工程里，发版前手跑或 CI batchmode |
+| Environment | Named cases | Smoke | TS |
+|---|---|---|---|
+| Windows/macOS arm64 Editor | 435 passed | 8/8 | 3/3 |
+| Win64 Player | 435 passed | 10/10 | 3/3 |
+| Chrome WebGL/WeChat tools | 434 passed, 1 explicit skip | 10/10 | 3/3 |
 
-官方示例工程：[zen-ts-demo](https://github.com/focus-creative-games/zen-ts-demo)（`js-demo` / `ts-demo`）。
+The HostJs skip is the managed-worker test unavailable in single-threaded builds. Android/macOS Players and iOS Simulator have runtime validation but have not covered the latest full named-case set.
 
----
+## Coverage areas
 
-## 2. Editor / Player 矩阵（高阶）
+Identity/views, inheritance, signatures/aliases, generics/params, numeric ranges/BigInt, byref/out, arrays/bytes, reference-containing structs, events/delegates, errors, Opaque expiry, GC, Reset, Unicode/NUL, and TS workflows. HostJs also tests actual collection, memory views, and precompiled-source identity.
 
-| 维度 | Editor（Mono） | Player（Il2Cpp） |
-|------|----------------|------------------|
-| 用途 | 日常迭代、调试器、快速失败 | **发布权威**；语义与 Editor 应对齐 |
-| Generate | 日常可不每次 | **必须** `ZenTS/Generate/All` |
-| 脚本路径 | `JsScripts` / `TsProject/out` | `StreamingAssets/Js` 或 `StreamingAssets/ZenTS` |
-| 断言标准 | 同一套期望行为 | **同一套**；不要「Editor 过就算」 |
+Lua/JS differ; compare observable rules rather than inferring branch coverage from function totals.
 
-**平台原则（实用版）：** 关键互操作路径至少覆盖 **Editor 一次 + 目标平台 Il2Cpp Player 一次**（目标可为 Win64 / Android / iOS / WebGL / 小游戏 / 鸿蒙等任一 Il2Cpp 平台，见 [兼容性](/docs/getting-started/compatibility/)）。任一端失败都视为失败，不要用「仅 Mono」当发版依据。
+## Debugger and platforms
 
-更细的双端差异：[Editor 与 Player](/docs/guides/editor-vs-player/)、[构建](/docs/guides/build/)。
+Inspector uses real CDP. Windows Domain Reload exits cleanly; macOS arm64 cleanup assertions pass but shutdown timeout remains. Tuanjie is supported; counts apply to listed environments, not every engine version. Validate phones, releases, and later LTS versions separately.
 
----
+## Reproduction
 
-## 3. 社区最小复现（提 Issue 前）
-
-请尽量附上：
-
-1. **Unity / 团结版本**、目标平台、ZenTS 包版本或 commit  
-2. **最小工程或补丁**：能去掉业务后仍复现的场景 / 两三个脚本  
-3. **复现步骤**：Editor 还是 Player；是否已 Install / Generate / Sync  
-4. **期望 vs 实际**：Console / Player 日志、完整异常栈  
-5. **相关片段**：JS/TS named export、`GetFunction` 签名、涉及的 C# 类型（public API）
-
-模板见 [联系方式](/docs/community/contact/#提问模板)。
-
-**不要**只说「Player 挂了」；没有路径与日志时很难定位 Generate / StreamingAssets / loader 问题。
-
----
-
-## 4. 建议的自测清单（实用）
-
-复制到项目 wiki / PR 描述即可：
-
-- [ ] Editor：`JsAppDomain.Initialize` 成功  
-- [ ] Editor：`GetFunction` 调到 named export，返回值正确  
-- [ ] Editor：`csharp:` 或 `CSharp` 调到目标类型；含 namespace 用括号键 / 带路径 import  
-- [ ] Editor：未知成员 → 抛 `zents:` 错误（strict miss）  
-- [ ] Editor：Event 用 `add_` / `remove_`，同一引用可卸  
-- [ ] （若用 TS）`tsc --noEmit` 通过；emit **未** bundle；Play 闸门符合预期  
-- [ ] Player：已 Generate；StreamingAssets 中有对应 `.js`  
-- [ ] Player：重复上述冒烟；无「仅 Editor」依赖  
-
-规范条款级用例语义以 `spec/**` 为准；内部 ZenTSTest 矩阵若未随文档开源，**以你工程内可跑通的清单为准**。
-
----
-
-## 5. 与 Demo / 规范的关系
-
-| 材料 | 用途 |
-|------|------|
-| [zen-ts-demo](https://github.com/focus-creative-games/zen-ts-demo) | 冒烟与工作流样板 |
-| [spec](/docs/category/spec/) | 行为契约；写用例时按章节对齐 |
-| [排障](/docs/guides/troubleshooting/) | 失败时的检查表 |
-| [FAQ](/docs/community/faq/) | 高频误解 |
-
----
-
-## 相关文档
-
-- [构建](/docs/guides/build/)
-- [Editor 与 Player](/docs/guides/editor-vs-player/)
-- [迁移](/docs/community/migration/)
-- [联系方式](/docs/community/contact/)
+Record source/SDK identity, versions, commands, module/case counts, skips, and process exit. Reuse Win64 exports for C++-only changes; regenerate/export after C# or generated-input changes. Static checks are not runtime execution.

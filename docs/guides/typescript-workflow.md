@@ -1,139 +1,45 @@
 ---
 sidebar_position: 5
-title: TypeScript 工作流
-description: TsProject、Generate Typings、Compile、Play 闸门与 emit。
+title: "TypeScript 工作流"
 ---
 
 # TypeScript 工作流
 
-ZenTS 运行时只执行 **ES module（JS）**；TypeScript 是官方一等编辑与检查路径，**不改变** JavaScript 可见互操作语义。权威约定见 [spec/14-TYPESCRIPT](/docs/spec/14-TYPESCRIPT/)。
+TypeScript 提供静态检查、CLR 声明和 Source Map；ZenTS 运行的是 emit 后的 JavaScript。构建使用 Node 工具链，运行时不包含 Node.js 标准库。
 
-## 一键初始化
+## 工程目录
 
-菜单 **`ZenTS/Init TypeScript Project`** → 在工程根生成 `TsProject/`（`package.json`、`tsconfig.json`、`src/` 等）。也可直接使用 [ts-demo](https://github.com/focus-creative-games/zen-ts-demo) 的 `TsProject/`。
-
-本机需要 **Node LTS**（调用 `npx tsc` / `npx esbuild`）。包 **不** 内嵌 tsc。
-
-## 工程布局
-
-```
-<UnityProject>/
-  TsProject/
-    package.json          # 仅 devDependencies：typescript、esbuild
-    tsconfig.json         # extends Library/ZenTS/CoreLibs/types/tsconfig.base.json
-    src/                  # 业务 TS（入库）
-      main.ts
-      game/logic.ts
-    generated/            # Generate Typings 产出（入库）
-      csharp/
-    out/                  # emit；默认 gitignore
-      main.js
-      main.js.map
-  Library/ZenTS/CoreLibs/ # Editor 从包暂存；tsc / IDE 用（gitignore）
-    types/
-    jslib/
-  Assets/StreamingAssets/ZenTS/   # Player 构建拷贝；非 Editor 权威源
+```text
+TsProject/
+  src/                  # 手写 TypeScript
+  out/                  # emit 的 JS 和 map
+  generated/csharp/     # csharp: 声明
+  generated/js-exports.json
+  tsconfig.json
+  package.json
 ```
 
-| 路径 | 版本库 |
-|------|--------|
-| `TsProject/src/**`、`generated/**`、`package.json`、`tsconfig.json` | **入库** |
-| `TsProject/out/**`、`node_modules/`、`Library/ZenTS/**` | **gitignore** |
+`ZenTS/Init TypeScript Project` 初始化工程并准备依赖；`ZenTS/Generate Typings` 生成声明；`ZenTS/Compile TypeScript` 检查并 emit。`Settings.typescriptBindingAssemblies` 决定 CLR 声明覆盖的程序集；默认包含 Assembly-CSharp 和包测试程序集，业务项目应按需配置。
 
-`.ts` **不要** 放进 `Assets/`（避免未知 importer）。
-
-git / PackageCache 安装时，磁盘上往往没有 `Packages/com.code-philosophy.zen-ts`；脚手架因此引用 **`Library/ZenTS/CoreLibs`**。打开工程或执行 Install / Init / Compile 时 Editor 会自动 Ensure 该目录。
-
-## 分层
-
-```
-IDE / CI     tsc --noEmit  +  generated/*.d.ts + zents.d.ts
-Emit         esbuild 1:1 或 tsc（.ts → .js + .js.map）
-Runtime      moduleLoader / csharp: / CSharp / zents
-```
-
-| 层 | 工具 | 职责 |
-|----|------|------|
-| 类型 | 包内 `zents.d.ts` + 生成的 `declare module "csharp:…"` | 仅编辑期 |
-| 检查 | `tsc --noEmit` | CI、提交前、进 Play 闸门 |
-| 发布 | esbuild **不打包** 的 1:1 transpile（或 `tsc` emit） | 产出 JS；**不** minify export 名 |
-
-**禁止** 用 esbuild 代替类型检查；**禁止** bundle / 打成单文件（会破坏 `GetFunction(module, export)`）。
-
-## 日常循环
-
-1. （可选）菜单 **`ZenTS/Generate Typings`**：刷新 `generated/csharp/**`，与 Il2Cpp **Generate** 类型集同源。
-2. 编写 `src/**/*.ts`。
-3. **Compile**（esbuild 1:1 或 `tsc` emit）→ `out/`。
-4. 进 Play：若闸门开启，先 `tsc --noEmit`，失败则 **阻止 Play**。
+## 类型模块和导出
 
 ```typescript
-// TsProject/src/game/logic.ts
-import { Demo } from "csharp:Assembly-CSharp";
-
-export function OnTick(dt: number): void {
-    const demo = new Demo();
-    demo.SetX(10);
-}
-
-export function add(a: number, b: number): number {
-    return a + b;
+import { Demo } from 'csharp:Assembly-CSharp';
+export function compute(a: number, b: number): number {
+  return Demo.Add(a, b);
 }
 ```
 
-```csharp
-// C#：canonical 不含 .js
-var onTick = JsAppDomain.GetFunction<Action<float>>("game/logic", "OnTick");
-var add = JsAppDomain.GetFunction<Func<int, int, int>>("game/logic", "add");
-```
+模块名使用规范化路径，例如 `demo/main`，不带 `.js` 后缀。`csharp:` 合成模块导出类型；`GetFunction` 绑定普通脚本模块的函数导出。
 
-Editor loader 读 `TsProject/out/{canonical}.js`。相对导入在源里写 `.js` 后缀（文件仍是 `.ts`）：
+生成声明反映 out 返回元组和显式 BigInt 槽位。64 位整数默认仍是 number；TS 类型声明不能消除浮点精度损失。可选参数、泛型约束和运行时可用的 AOT 实例都应另行验证。
 
-```typescript
-import { helper } from "./util.js"; // 源文件 util.ts
-```
+## 检查与发布
 
-## Specifier 约定
+`enableTsPlayGate` 默认开启：进入 Play 前检查并在输出过时时 emit。它不能替代 Player Generate 或 AOT 验收。原生和发布资源使用不同复制路径；使用构建处理器，不要手工把某个 Editor 文件路径写死到移动平台。
 
-| 用途 | 写法 |
-|------|------|
-| 业务模块 | `"main"`、`"game/logic"`（**无** `.js` / `.ts`） |
-| C# 类型 | `"csharp:Assembly-CSharp"`、`"csharp:Assembly-CSharp/MyGame.UI"` |
-| `GetFunction` | 与业务 canonical **同一字符串** |
+HostJs 在构建期将 ESM 转成静态模块工厂，运行时不 eval；动态 import/import.meta 与顶层 await 不在当前支持范围。新增模块及 Reset 源码变体需要重新打包。
 
-## Play 闸门与 Player
+## 调试源码
 
-| 项 | 默认 | 行为 |
-|----|------|------|
-| TypeScript Play 闸门 | **开** | 进 Play 前 `tsc --noEmit`；失败阻止 Play |
-| 闸门关闭 | Settings 可关 | 仍建议 CI 跑检查 |
-
-Player 构建：emit → 拷贝 `out/**/*.js`（及可选 `.map`）到 `StreamingAssets/ZenTS/`；Player loader **只**读 StreamingAssets，**不**跑 Node、**不**读 `.ts`。见 [构建](/docs/guides/build/)。
-
-## 与纯 JS 的关系
-
-`js-demo` 跳过 tsc；`ts-demo` 展示完整闸门。两边互操作语义相同：仍是 `GetFunction` + `csharp:` / `CSharp`。
-
-## 常见错误
-
-| 现象 | 处理 |
-|------|------|
-| Play 被拦截 | 看 Console 的 `tsc` 错误；或临时关闸门 |
-| `csharp:` 找不到类型 | 跑 Generate Typings；检查程序集 / 命名空间路径 |
-| `GetFunction` 找不到 export | emit 是否过期；是否被 bundle / 改名；canonical 是否带 `.js` |
-| `import type` 后 `new T` 失败 | 改为值导入 `import { T } from "csharp:…"` |
-| 缺 Node | 安装 Node LTS；闸门开启时禁止静默跳过检查 |
-
-## 学习路径
-
-| | |
-|---|---|
-| **上一篇** | [C# 调用 JS](/docs/guides/csharp-calling-js/) |
-| **下一篇** | [构建](/docs/guides/build/) |
-
-## 相关文档
-
-- [规范 · TypeScript](/docs/spec/14-TYPESCRIPT/)
-- [类型系统 · csharp:](/docs/spec/02-TYPE-SYSTEM/)
-- [JS 调试器](/docs/guides/js-debugger/)（source map → `TsProject/src`）
-- [快速开始](/docs/getting-started/quick-start/)
+保留 emit 的 Source Map 和对应 src/out。默认工具生成 map；Inspector 为 TsProject 提供源码路由。断点未绑定时先检查模块 URL、emit 是否最新、map 是否与 JS 对应，再检查[调试器配置](js-debugger.md)。

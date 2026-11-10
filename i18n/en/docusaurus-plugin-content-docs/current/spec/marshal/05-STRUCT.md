@@ -1,218 +1,47 @@
 ---
 sidebar_position: 11
-title: "Struct Marshal"
----
-:::note 文档站副本
-本页为语义契约的发布副本；请在上游 `ZenTSTest/Docs/spec` 修改后执行 `npm run sync-spec`。（源：`marshal\05-STRUCT.md`）
-:::
-
-
-# Struct Marshal
-
-> **规范性：** C# struct（值类型）与 JavaScript 互操作的传递、构造与写回规则。
-> **OpaqueValue / byref（C#→JS）：** 见 [04-OPAQUE.md](./04-OPAQUE.md)。
-> **JS→C# byref 真 ref：** 见 [03-BYREF.md](./03-BYREF.md)。
-> **Table / UnpackedValues：** 见 [02-MARSHAL-AS.md §5–§6](./02-MARSHAL-AS.md)。
-
+title: "Struct marshaling"
 ---
 
-## 1. 设计目标
+# Struct marshaling
 
-| 目标 | 说明 |
-|------|------|
-| 零拷贝（默认 Handle） | struct 在桥接栈帧上时，C#→JS 可 Push OpaqueValue handle |
-| 安全 | JS **不持有** struct 裸地址；过期访问 **throw** |
-| 统一 | struct 与 class 同样走 `CSharp.*`、`obj.Method()` |
-| 可显式选择 | `[JsMarshalAs]`：`Object`、`Table`、`UnpackedValues`、`OpaqueValue` |
+## 1. Representations
 
-**术语：**
+Default C#→JS by-value struct output is a **ByVal copy**. Byref or legal explicit OpaqueValue uses a call-scoped borrow. JS→CLR defaults accept compatible CLR value/boxed wrappers or valid supported Opaque, not plain objects/multiple inputs without policies.
 
-- **Blittable struct**：可 `memcpy`，无托管引用字段。
-- **Non-blittable struct**：含 `string`、class 等；ByVal exotic 须 GC 扫描。
+| Form | Members | Lifetime |
+|---|---|---|
+| Opaque | get/set/to_user_data only | Creating synchronous call |
+| ByVal | Struct ByVal IEO | JS wrapper/registry |
+| ByObj | Boxed CLR value, ByObj IEO | CLR GC root |
 
----
+new T(...) and T._default() create ByVal. to_user_data copies a supported borrow. box creates ByObj; unbox requires a boxed value, not ByVal, and extracts a value/default scalar.
 
-## 2. 默认 Marshal（摘要）
+## 2. Receiver domains
 
-| 方向 | 默认形态 | 说明 |
-|------|----------|------|
-| **C# → JS**（by-val） | **ByVal exotic** 或 **OpaqueValue** | 长生命周期 Push **ByVal exotic**；同步链 by-val 亦可能 OpaqueValue |
-| **C# → JS**（`ref`/`in`/`out`） | **OpaqueValue** | [04-OPAQUE.md](./04-OPAQUE.md) |
-| **JS → C#** | **ByVal exotic** 或 **`new Type(...)`** | 默认 **不** 接受 plain object / 多实参；须 `[Table \| UnpackedValues]` |
+ByVal methods declared by the struct use copy payload storage; methods declared by class bases require boxing. ByObj struct methods use unboxed payload; class methods use the boxed object. Do not attach/use a ByObj closure with ByVal storage or vice versa. Static members remain on type objects.
 
----
+## 3. Inputs and writeback
 
-## 3. 三种 JavaScript 可见形态
+Exact ByVal ref storage can be modified; in grants no writes. T→Nullable&lt;T&gt; uses temporary Nullable. Compatible Opaque must remain valid. Other legal inputs use temporary storage without JS-local rebinding. JS→CLR out has no input: allocate default(T), then return it in the out tuple.
 
-```text
-┌─────────────────────────────────────────────────────────────┐
-│  C# struct 在 JS 侧的承载形态                                │
-├─────────────────┬───────────────────┬───────────────────────┤
-│  OpaqueValue    │  ByVal exotic     │  ByObj exotic         │
-│  (Handle)       │  (StructUserData) │  (boxed)              │
-├─────────────────┼───────────────────┼───────────────────────┤
-│  无成员分派     │  IEO 三表分派     │  ByObj IEO            │
-│  仅同步有效     │  可长期持有       │  装箱路径             │
-│  get/set_opaque │  .field / .Method │  .field / .Method     │
-└─────────────────┴───────────────────┴───────────────────────┘
-```
+Default does not accept `{ X: 1 }` or N scalars as a struct. Table/UnpackedValues opt in explicitly.
 
-| 形态 | 典型来源 | 成员访问 | 生命周期 |
-|------|----------|----------|----------|
-| **OpaqueValue** | C#→JS by-val（同步）或 **byref** 默认 | **不可** `.` 成员；须 get/set 或 `to_user_data` | 仅本次 C#→JS 调用 |
-| **ByVal exotic** | Push 拷贝、`new Type(...)`、`to_user_data` | **ByVal IEO** | JS GC + Registry |
-| **ByObj exotic** | box 路径、`zents.box` | **ByObj IEO** | `ObjectRegistry` GC root |
-
-**互转：** `zents.to_user_data(opaque)` **拷贝** 为 ByVal exotic，与原 opaque 独立。
-
----
-
-## 4. ByVal 与 ByObj 双 IEO
-
-| 路径 | exotic 载荷 | 实例分派 |
-|------|-------------|----------|
-| **ByObj** | 托管对象指针（boxed） | **ByObj IEO**（`__byobjInstanceProto`） |
-| **ByVal** | struct **值拷贝**（payload） | **ByVal IEO**（`__byvalInstanceProto`） |
-
-类型对象 `T` 含 `__struct : true` 及两套 instance proto（Nullable **无** IEO，见 [../02-TYPE-SYSTEM.md](../02-TYPE-SYSTEM.md) §3.6）。
-
-### 4.1 实例方法 `this` 解析
-
-| 路径 | 方法定义在 **当前 struct** | 定义在 **class 基类** |
-|------|---------------------------|------------------------|
-| **ByObj** | `this` = unboxed payload | `this` = boxed 对象指针 |
-| **ByVal** | `this` = payload 首地址 | 须 **Box** 后以 object 指针为 `this` |
-
-**禁止** ByVal exotic 挂 ByObj IEO（或反之）→ **throw**。
-
-### 4.2 C# → JS Push 路径
-
-| 条件 | Push 结果 |
-|------|-----------|
-| box / `object` 形参 | **ByObj exotic** |
-| 显式 ByVal / blittable 拷贝 | **ByVal exotic** |
-| 同步链 by-val 默认 | **OpaqueValue** 或 ByVal（实现策略须两平台一致） |
-| `[JsMarshalAs(OpaqueValue)]` on by-val | **OpaqueValue** |
-
----
-
-## 5. JavaScript → C#：接受的实参
-
-| 形态 | 说明 |
-|------|------|
-| **OpaqueValue** | 须仍在有效 scope；Pop 绑定地址 |
-| **ByVal exotic** | by-val：拷贝 payload；`ref`/`out`/`in`：payload 地址（§6） |
-| **`new Type(...)` / `Type._default()`** | ByVal payload |
-| **`UnpackedValues`** | N 个连续实参 |
-| **`Table`** | 单个 plain object；`Nullable` 另接受 `null`/`undefined` |
-
-**默认不接受** plain object `{ X:1 }` 或多实参组装（无标注时）。
-
----
-
-## 6. 写回与 `ref` / `out` / `in`
-
-见 [03-BYREF.md](./03-BYREF.md)。要点：
-
-| JS 实参 | `ref`/`out`/`in` A（值类型） |
-|---------|------------------------------|
-| **ByVal exotic**，类型 **== A** | payload 地址，**可写回** |
-| **ByVal exotic**，**A = `Nullable<T>`**，exotic 类型 **== T** | 拷入 `Nullable<T>` 临时槽 |
-| **OpaqueValue** | handle 地址 |
-| **其它** | 临时槽，**不写回** JS |
-
-```javascript
-const p = new Point2D(1, 2);
-CS.Demo.Offset(p, 10, 20);
-console.assert(p.x === 11);
-```
-
----
-
-## 7. `Table` / `UnpackedValues`
-
-规则以 [02-MARSHAL-AS.md §5–§6](./02-MARSHAL-AS.md) 为准。
-
-| `JsMarshalType` | JS → C# | C# → JS |
-|-----------------|---------|---------|
-| **`UnpackedValues`** | 连续 N 实参 | **Array** 长度 N（或 bridge 约定） |
-| **`Table`** | plain object；Nullable 无值 → `null`/`undefined` | plain object；无值 → **`null`** |
-
-类型级示例：
+## 4. Table and UnpackedValues
 
 ```csharp
 [JsMarshalAs(JsMarshalType.Table, Members = new[] { "X", "Y" })]
 public struct Vector2 { public float X; public float Y; }
 ```
 
----
+Members may name supported public fields/properties. Table is one object, with null/undefined accepted as Nullable no-value according to input rules; output no-value is null. Optional `?` Table keys use own-property existence, not merely undefined.
 
-## 8. 枚举与 struct 的区别
+UnpackedValues parameters consume N inputs. Return/out slots are N-element arrays, nested in outer out tuples, never flattened. No `?` suffix exists for UnpackedValues. Nullable does not support UnpackedValues.
 
-见 [08-ENUM.md](./08-ENUM.md)。enum **无** `[[Construct]]` / ByVal `new Enum(...)`；默认 **number**。
+## 5. GC and policies
 
----
+Blittable copies can use raw-copy storage where appropriate. Reference-containing copies need CLR-visible roots; heap/reference-array writes need barriers. Payload release must match registration. An unmanaged buffer alone does not root references.
 
-## 9. `zents.box` / `zents.unbox` / `zents.cast`
+Members may have legal concrete BigInt policies, but a whole struct cannot be BigInt. ActualTypeUserData is not a value-return policy. Enums have no ordinary struct constructor and default to number.
 
-| API | struct 语义 |
-|-----|-------------|
-| **`zents.box(typeArg, value)`** | 装箱 → **ByObj exotic** |
-| **`zents.unbox(boxed)`** | ByObj → **ByVal exotic** 或标量 |
-| **`zents.cast(obj, targetType)`** | 引用门面；struct 见 [06-CLASS.md](./06-CLASS.md) |
-
-**`unbox` 不接受** ByVal exotic → **throw**。
-
----
-
-## 10. 生命周期
-
-```text
-[C# 调 JS，同步链]
-  Push OpaqueValue(h) → JS_Call 回调
-  C# 返回 → h 失效
-
-需长期持有 → zents.to_user_data(h) 或 ByVal exotic 路径
-```
-
-| 形态 | 失效 |
-|------|------|
-| **OpaqueValue** | C# 返回 / scope End |
-| **ByVal exotic** | JS GC → Registry Release |
-
----
-
-## 11. Non-blittable struct（规范层）
-
-1. ByVal exotic 内 **完整拷贝** struct（含引用字段）。
-2. GC 须扫描 payload 内 **托管引用**（Il2Cpp：`RegisterPushRootCallback` 等）。
-3. exotic 释放与 Registry **对称**。
-
-Blittable：仅 `memcpy` 到 payload。
-
----
-
-## 12. 与类型系统衔接
-
-- `T.__struct === true`；`T.__byvalInstanceProto` / `__byobjInstanceProto`。
-- **Opaque**：无 IEO；不可 `.` 访问字段。
-- **禁止** 经实例访问静态成员（须用类型对象 `T`）。
-
----
-
-## 13. Mono / Il2Cpp 一致性
-
-三种形态、Handle 过期、`to_user_data` 拷贝语义、`Table`/`UnpackedValues`/`?`、StructUserData 真 ref — **须一致**。
-
----
-
-## 14. 相关文档
-
-| 主题 | 文档 |
-|------|------|
-| 默认矩阵 | [01-OVERVIEW.md](./01-OVERVIEW.md) |
-| `[JsMarshalAs]` | [02-MARSHAL-AS.md](./02-MARSHAL-AS.md) |
-| byref / Opaque | [03-BYREF.md](./03-BYREF.md)、[04-OPAQUE.md](./04-OPAQUE.md) |
-| 枚举 | [08-ENUM.md](./08-ENUM.md) |
-| `zents.*` | [../05-LIB.md](../05-LIB.md) |
-| 类型对象 | [../02-TYPE-SYSTEM.md](../02-TYPE-SYSTEM.md) §3.7 |
+Opaque expires on all return/error paths; do not retain borrowed addresses. Mono/IL2CPP and engines must agree on copy, receiver, Table, UnpackedValues, optional keys, byref writeback, and failures. See [policies](02-MARSHAL-AS.md) and [types](../02-TYPE-SYSTEM.md).

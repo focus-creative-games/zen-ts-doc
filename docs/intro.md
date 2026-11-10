@@ -1,81 +1,32 @@
 ---
 sidebar_position: 1
 slug: /intro
-title: 介绍
-description: ZenTS 是什么、核心特性与适用场景。
+title: "ZenTS 介绍"
 ---
 
-# 介绍
+# ZenTS 介绍
 
-**ZenTS**（曾用名 ZTS）是一个针对 Unity Il2Cpp 优化的现代 **TypeScript / JavaScript** 脚本方案，由 **QuickJS** 驱动，设计与 [ZLua](https://doc.zlua.cn) 对齐。
+ZenTS 是面向 Unity / 团结引擎的 JavaScript / TypeScript 脚本方案，沿用 ZLua 的 CLR 互操作设计，并针对 JavaScript 的 `this`、`undefined`、BigInt、模块与 GC 作适配。
 
-它用清晰的规则统一 C# 与 JS 的双向调用：`JsAppDomain.GetFunction`、`CSharp[…]` / `import from "csharp:…"`、`[JsMarshalAs]` 等，屏蔽底层易错的原生绑定细节。
+## 执行模型
 
-## 命名约定
+| 场景 | CLR 宿主 | JavaScript 引擎 |
+|---|---|---|
+| Windows / macOS Editor | Mono + Expression Emit | 原生 V8 |
+| Win64 / macOS / Android Player | IL2CPP + C++ 互操作内核 | 静态链接的原生 V8 |
+| iOS Player | IL2CPP + C++ 互操作内核 | JITless V8 |
+| WebGL / 已适配的微信小游戏 | IL2CPP / WASM | 平台已有 JS VM（HostJs） |
 
-| 用途 | 名称 |
-|------|------|
-| 产品名 | **ZenTS** |
-| 代码标识 | `zents`（如 `zents.*`、`Error('zents: …')`） |
-| C# 命名空间 / 程序集 | `ZenTS`、`ZenTS.Common` / `ZenTS.Mono` / `ZenTS.Il2Cpp` |
-| Unity 包 / 仓库 | `com.code-philosophy.zen-ts` · [zen-ts](https://github.com/focus-creative-games/zen-ts) |
-| 官网 | [https://zen-ts.com](https://zen-ts.com) |
+当前没有 QuickJS 后端或回退。V8 从官方原始源码构建为静态 SDK，再链接适配库与 Editor 插件；没有嵌入 Node.js。支持范围与实际设备验收是两回事，见[兼容性](/docs/getting-started/compatibility/)和[项目状态](/docs/getting-started/project-status/)。
 
-## 为什么选择 ZenTS
+## 核心能力
 
-相对 Puerts / 自管 QuickJS，以及「手写绑定」：
+- `CSharp[assembly][fullName]` 和 `csharp:` 模块按需绑定类型，不要求逐类型 C# Wrap 白名单。
+- `JsAppDomain.GetFunction<T>` 提供 C#→JS 调用；方法、构造、泛型、Alias、扩展方法使用明确的匹配规则。
+- 支持 struct、Nullable、数组、委托、事件、ref/in/out 与显式 Marshal 策略。Int64/UInt64 默认 `number`，精确通道显式使用 `JsMarshalType.BigInt`。
+- HostJs 复用 CLR 绑定与封送内核，业务代码在宿主 VM 执行；模块工厂在构建期生成。
+- Git URL / 只读 PackageCache 安装、项目级 SDK、TypeScript 声明与 emit、Editor V8 Inspector 已接入。
 
-| | |
-|--|--|
-| **更易用** | 设计贴近 C#；**零 per-type Wrap 白名单**；类型懒绑定 |
-| **更完备** | 重载、ref/out、struct ByVal/ByObj、Nullable、委托、数组、指针、`[JsMarshalAs]` 等 |
-| **更统一** | 与 ZLua **同一套语义契约**；会用 ZLua 即可很快上手 ZenTS |
-| **更高效** | Player **Il2Cpp** 热路径为 C++ 桥接；签名复用 stub |
-| **更少 GC** | 引用类型与 struct 默认 Registry / ByVal；另有 Opaque 等策略 |
-| **双运行时** | Editor **Mono** + 发布 **Il2Cpp Player** |
-| **TS 一等公民** | `TsProject`、`csharp:` 声明、进 Play 闸门；运行时仍只跑 emit 后的 JS |
+“按需绑定”不等于免安装或免构建配置：Player 需要 IL2CPP 集成、Generate、AOT 保留和对应平台 SDK。
 
-完整论述见 **[为什么选择 ZenTS](/docs/concepts/why-zents/)**；对照见 **[选型对比](/docs/compare/FEATURES/)**。
-
-## 核心特性
-
-| 能力 | 说明 |
-|------|------|
-| JS/TS → C# | `CSharp` 懒绑定或 `import { T } from "csharp:…"`；实例 `obj.Method(args)` |
-| C# → JS | `JsAppDomain.GetFunction<T>(module, export)`（specifier **无** `.js`/`.ts`） |
-| 双运行时 | **Mono（Editor）与 Il2Cpp（Player）**；语义一致、实现路径不同 |
-| TypeScript | 官方工作流；见 [TypeScript 工作流](/docs/guides/typescript-workflow/) |
-| Marshal | ByVal / ByObj / Opaque 等，见 [Marshal 规范](/docs/spec/marshal/) |
-| miss | 未注册成员 **`throw Error('zents: member not found')`**，不返回 `undefined` |
-
-:::info 当前状态
-<span class="runtimeBadge"><span class="runtimeBadgeMono">Mono · 已完成</span><span class="runtimeBadgeIl2cpp">Il2Cpp · 已完成</span></span>
-
-日常在 **Editor（Mono）** 开发；发版与性能以 **Il2Cpp Player** 为准。详见 [项目状态](/docs/getting-started/project-status/)。
-:::
-
-## 诚实边界
-
-| 情况 | 建议 |
-|------|------|
-| 不愿维护 libil2cpp 集成 | 评估 Puerts / 更轻量自管方案 |
-| 已有大量 Puerts 资产 | 先读 [迁移](/docs/community/migration/) |
-| 只需极少手写绑定 | 自管 QuickJS 可能更直接 |
-| 团队只写 Lua | 优先 [ZLua](https://doc.zlua.cn) |
-
-公开性能数字：方法论对齐 ZLua；**ZenTS 公开基准待补齐**（见 [特性对比](/docs/compare/FEATURES/)）。
-
-## 相关产品
-
-| 产品 | 说明 |
-|------|------|
-| **本站（ZenTS）** | Unity / 团结引擎上的 TypeScript·JavaScript（QuickJS）方案 |
-| **[ZLua](https://doc.zlua.cn)** | 同构语义的 Lua 产品线 |
-| **[zts-ue](https://github.com/focus-creative-games/zts-ue)** | Unreal Engine 上的现代 TypeScript 方案（面向 C++ 优化）；**目前仍在开发中**，本站文档不覆盖 UE 用法 |
-
-## 下一步
-
-1. [5 分钟快速开始](/docs/getting-started/quick-start/) — 跑通 js-demo / ts-demo
-2. [安装与集成](/docs/getting-started/installation/) · [使用指南](/docs/guides/install/)
-3. [设计概览](/docs/concepts/design-overview/) · [双运行时](/docs/concepts/dual-runtime/)
-4. [规范总览](/docs/spec/00-OVERVIEW/) — 需要完备语义时再深入
+从[安装](/docs/getting-started/installation/)和[快速开始](/docs/getting-started/quick-start/)开始；行为以[规范](/docs/spec/00-OVERVIEW/)为准。跨方案比较见[设计取舍](/docs/compare/FEATURES/)，测试证据见[测试与验收](/docs/community/testing/)。

@@ -1,54 +1,19 @@
 ---
 sidebar_position: 4
-title: 联系方式
-description: QQ、Discord、Issue 与仓库。
+title: "Community and feedback"
 ---
 
-# 联系方式
+# Community and feedback
 
-## 渠道
+- Source/issues: [zen-ts](https://github.com/focus-creative-games/zen-ts)
+- Documentation: [zen-ts-doc](https://github.com/focus-creative-games/zen-ts-doc)
+- Examples: [zen-ts-demo](https://github.com/focus-creative-games/zen-ts-demo)
+- Site: [zen-ts.com](https://zen-ts.com)
+- Discord: [community invitation](https://discord.gg/5bT7w9aRMz)
+- QQ group: 1095435513
+- Email: zts@code-philosophy.com
+- Related: [ZLua documentation](https://doc.zlua.cn)
 
-- QQ 群：`1095435513`（ZenTS 交流群）
-- Discord：[https://discord.gg/5bT7w9aRMz](https://discord.gg/5bT7w9aRMz)
-- 源码与 Issue：[focus-creative-games/zen-ts](https://github.com/focus-creative-games/zen-ts)
-- Demo：[zen-ts-demo](https://github.com/focus-creative-games/zen-ts-demo)
-- 文档站：[zen-ts.com](https://zen-ts.com/)；文档源码 [zen-ts-doc](https://github.com/focus-creative-games/zen-ts-doc)
-- 邮件：`zts@code-philosophy.com`
+Include Unity/Tuanjie version, OS/CPU, V8/HostJs, SDK fingerprint, minimal C#/JS repros, first exception, and steps. Distinguish emulators/tools from physical devices and sanitize credentials/private configuration.
 
-### 同族产品
-
-| 产品 | 链接 | 备注 |
-|------|------|------|
-| ZLua（Lua） | [doc.zlua.cn](https://doc.zlua.cn) | 问题请发到对应仓库 / 群，避免混提 |
-| **zts-ue**（Unreal） | [focus-creative-games/zts-ue](https://github.com/focus-creative-games/zts-ue) | UE 上的 TypeScript 方案；**开发中**，勿与本站 Unity 问题混提 |
-
-## 提问模板
-
-在 QQ / Discord / Issue 提问时，直接粘贴下面结构（能填多少填多少）：
-
-```text
-【环境】
-- Unity / 团结版本：
-- 平台：Editor（Win / macOS） / Player（Win64 / Android / iOS / WebGL / 小游戏 / 鸿蒙…）：
-- ZenTS 版本或 commit：
-- 纯 JS 还是 TsProject：
-
-【现象】
-- 期望：
-- 实际：
-- 是否仅 Player 失败：
-
-【已做检查】
-- [ ] Install
-- [ ] Generate/All（Player）
-- [ ] 脚本已 Sync / 拷贝到 StreamingAssets
-- [ ] canonical 未带 .js
-- [ ] 未使用废弃 Event 糖语法
-
-【最小复现】
-- 步骤：
-- 关键 JS/TS + C# 片段：
-- 日志 / 栈：
-```
-
-更完整的复现要求见 [测试](/docs/community/testing/)。排障自助：[排障指南](/docs/guides/troubleshooting/)、[FAQ](/docs/community/faq/)。
+For documentation issues, identify the page and example; for behavior issues, include a minimal reproduction.

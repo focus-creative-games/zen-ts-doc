@@ -3,7 +3,7 @@ sidebar_position: 15
 title: "Delegate / 函数 Marshal"
 ---
 
-> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
+> 本页定义当前互操作契约；平台验收范围与已知限制见[对齐状态](/docs/spec/03-ALIGNMENT/)。
 # Delegate / 函数 Marshal
 
 > **规范性：** C# `Delegate` 与 JavaScript function 之间的双向 Marshal。
@@ -207,7 +207,7 @@ obj.RegisterCallback(d);
 
 **C# delegate → JS（JS 源）：** Push function；**不** 新建 ref。
 
-**C# delegate → JS（原生）：** exotic `__gc` → `ObjectRegistry.Unregister`；**不** pin JS function。
+**C# delegate → JS（CLR 来源）：** wrapper 弱终结通知排队释放 ObjectRegistry 根；由 owner thread 帧泵处理，不依赖 Lua 式 __gc；不另行 pin JS function。
 
 ---
 

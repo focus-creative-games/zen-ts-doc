@@ -3,7 +3,7 @@ sidebar_position: 4
 title: "成员绑定与继承"
 ---
 
-> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
+> 本页定义当前互操作契约；平台验收范围与已知限制见[对齐状态](/docs/spec/03-ALIGNMENT/)。
 
 # 03 — 成员绑定与继承
 
@@ -45,4 +45,4 @@ Alias、MarshalAs、Extension XML 只用于 AOT 程序集并在编辑初始化/G
 
 ## 8. 验收
 
-继承隐藏/override、静实例隔离、ByVal/ByObj、Alias 撞名、单候选签名、泛型签名和配置重复均须有对照用例。P1 的旧行为通过不能替代 P3 新契约测试。
+继承隐藏/override、静实例隔离、ByVal/ByObj、Alias 撞名、单候选签名、泛型签名和配置重复均须有对照用例。历史旧行为通过不能代替当前 435 命名用例与各平台真实运行。

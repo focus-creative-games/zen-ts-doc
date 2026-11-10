@@ -17,11 +17,11 @@ function HomepageHeader() {
       <div className="container">
         <Heading as="h1" className="hero__title">
           <Translate id="homepage.title">ZenTS 文档</Translate>
-          <span className="badgeAlpha">Alpha</span>
+          <span className="badgeAlpha">V8 / HostJs</span>
         </Heading>
         <p className="hero__subtitle">
           <Translate id="homepage.tagline">
-            零配置 · 完备 C# 互操作 · QuickJS 上的 TypeScript / JavaScript
+            TypeScript / JavaScript · CLR 懒绑定 · V8 与平台 JS VM
           </Translate>
         </p>
         <div className={styles.runtimeRow}>
@@ -31,7 +31,7 @@ function HomepageHeader() {
           <Link
             className="button button--secondary button--lg"
             to="/docs/getting-started/quick-start">
-            <Translate id="homepage.cta.quickStart">5 分钟快速开始</Translate>
+            <Translate id="homepage.cta.quickStart">快速开始</Translate>
           </Link>
           <Link
             className="button button--outline button--secondary button--lg"
@@ -41,7 +41,7 @@ function HomepageHeader() {
         </div>
         <p className={styles.heroMeta}>
           <Translate id="homepage.heroMeta">
-            Unity 2021.3 / 2022.3 / 6000 · 团结 · QuickJS · Editor Win/macOS · Player 含 Win64 / Android / iOS / WebGL / 小游戏 / 鸿蒙
+            Unity 2022.3.x 及后续 LTS · 团结 · Win64 / macOS / iOS / Android / WebGL / 微信
           </Translate>
         </p>
       </div>
@@ -50,7 +50,7 @@ function HomepageHeader() {
 }
 
 const CSHARP_INVOKE = `// Bootstrap
-JsAppDomain.Initialize(LoadJsModule);
+JsAppDomain.Initialize(JsFileModuleLoader.Load);
 
 void Start()
 {
@@ -58,7 +58,7 @@ void Start()
     Debug.Log(add(10, 20)); // 30
 }`;
 
-const JS_EXPORT = `// JsScripts/app.js  (canonical: "app")
+const JS_EXPORT = `// TsProject/out/app.js  (canonical: "app")
 export function add(a, b) {
   return a + b;
 }`;
@@ -109,7 +109,7 @@ export default function Home(): ReactNode {
       description={translate({
         id: 'homepage.layoutDesc',
         message:
-          'ZenTS：Unity 上基于 QuickJS 的 TypeScript / JavaScript 脚本方案，设计与 ZLua 对齐。',
+          'ZenTS：沿用 ZLua CLR 设计的 Unity TypeScript / JavaScript 方案，原生 V8 与平台 HostJs 双后端。',
       })}>
       <HomepageHeader />
       <main>

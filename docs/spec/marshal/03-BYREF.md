@@ -3,7 +3,7 @@ sidebar_position: 3
 title: "ref、in、out Marshal"
 ---
 
-> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
+> 本页定义当前互操作契约；平台验收范围与已知限制见[对齐状态](/docs/spec/03-ALIGNMENT/)。
 
 # `ref` / `in` / `out` Marshal
 
@@ -70,4 +70,4 @@ Bind 期记录 CLR 参数索引、JS 槽游标、byref 角色、默认值和结�
 
 ## 7. 平台一致性与状态
 
-上述规则须覆盖方法、构造和 CLR delegate 的普通 Invoke 路径。当前 P1 仍保留旧 out 占位实现；P3 才同步 writer、匹配器、调用桥、TS tuple 声明与测试，见 [实现状态](../03-ALIGNMENT.md)。
+上述规则须覆盖方法、构造和 CLR delegate 的普通 Invoke 路径。当前 writer、匹配器、调用桥及 TS tuple 声明已使用上述规则，不保留旧 out 占位分支；平台验收见 [实现状态](../03-ALIGNMENT.md)。

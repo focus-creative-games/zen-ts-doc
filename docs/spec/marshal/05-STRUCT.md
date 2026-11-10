@@ -3,7 +3,7 @@ sidebar_position: 11
 title: "Struct Marshal"
 ---
 
-> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
+> 本页定义当前互操作契约；平台验收范围与已知限制见[对齐状态](/docs/spec/03-ALIGNMENT/)。
 # Struct Marshal
 
 > **规范性：** C# struct（值类型）与 JavaScript 互操作的传递、构造与写回规则。
@@ -17,7 +17,7 @@ title: "Struct Marshal"
 
 | 目标 | 说明 |
 |------|------|
-| 零拷贝（默认 Handle） | struct 在桥接栈帧上时，C#→JS 可 Push OpaqueValue handle |
+| 显式借用 | byref 或合法显式 OpaqueValue 槽使用调用期 handle；默认 by-val 为值副本 |
 | 安全 | JS **不持有** struct 裸地址；过期访问 **throw** |
 | 统一 | struct 与 class 同样走 `CSharp.*`、`obj.Method()` |
 | 可显式选择 | `[JsMarshalAs]`：`Object`、`Table`、`UnpackedValues`、`OpaqueValue` |
@@ -33,7 +33,7 @@ title: "Struct Marshal"
 
 | 方向 | 默认形态 | 说明 |
 |------|----------|------|
-| **C# → JS**（by-val） | **ByVal exotic** 或 **OpaqueValue** | 长生命周期 Push **ByVal exotic**；同步链 by-val 亦可能 OpaqueValue |
+| **C# → JS**（by-val） | **ByVal exotic** | 按值复制；显式策略另行处理 |
 | **C# → JS**（`ref`/`in`/`out`） | **OpaqueValue** | [04-OPAQUE.md](./04-OPAQUE.md) |
 | **JS → C#** | **ByVal exotic** 或 **`new Type(...)`** | 默认 **不** 接受 plain object / 多实参；须 `[Table \| UnpackedValues]` |
 
@@ -56,7 +56,7 @@ title: "Struct Marshal"
 
 | 形态 | 典型来源 | 成员访问 | 生命周期 |
 |------|----------|----------|----------|
-| **OpaqueValue** | C#→JS by-val（同步）或 **byref** 默认 | **不可** `.` 成员；须 get/set 或 `to_user_data` | 仅本次 C#→JS 调用 |
+| **OpaqueValue** | C#→JS 显式 OpaqueValue 或 **byref** 默认 | **不可** `.` 成员；须 get/set 或 `to_user_data` | 仅本次 C#→JS 调用 |
 | **ByVal exotic** | Push 拷贝、`new Type(...)`、`to_user_data` | **ByVal IEO** | JS GC + Registry |
 | **ByObj exotic** | box 路径、`zents.box` | **ByObj IEO** | `ObjectRegistry` GC root |
 
@@ -88,7 +88,7 @@ title: "Struct Marshal"
 |------|-----------|
 | box / `object` 形参 | **ByObj exotic** |
 | 显式 ByVal / blittable 拷贝 | **ByVal exotic** |
-| 同步链 by-val 默认 | **OpaqueValue** 或 ByVal（实现策略须两平台一致） |
+| by-val 默认 | **ByVal exotic** 值副本 |
 | `[JsMarshalAs(OpaqueValue)]` on by-val | **OpaqueValue** |
 
 ---
@@ -113,7 +113,7 @@ title: "Struct Marshal"
 
 | JS 实参 | ref/in A（值类型） |
 |---------|------------------------------|
-| **ByVal exotic**，类型 **== A** | payload 地址，**可写回** |
+| **ByVal exotic**，类型 **== A** | payload 地址，ref 可写回，in 不授权写入 |
 | **ByVal exotic**，**A = `Nullable<T>`**，exotic 类型 **== T** | 拷入 `Nullable<T>` 临时槽 |
 | **OpaqueValue** | handle 地址 |
 | **其它** | 临时槽，**不写回** JS |
@@ -215,7 +215,7 @@ Blittable：仅 `memcpy` 到 payload。
 | 类型对象 | [../02-TYPE-SYSTEM.md](../02-TYPE-SYSTEM.md) §3.7 |
 
 
-## 15. 目标补充
+## 15. out 与策略边界
 
 JS→CLR out 使用独立 default(T) 临时槽并加入结果元组，不接受旧占位语法；ref/in 按原地址或临时副本规则。in 不授权写入，任何通过 Opaque 再传 ref 的只读绕过都应拒绝。
 

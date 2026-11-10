@@ -3,7 +3,7 @@ sidebar_position: 1
 title: "Marshal 总览与默认矩阵"
 ---
 
-> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
+> 本页定义当前互操作契约；平台验收范围与已知限制见[对齐状态](/docs/spec/03-ALIGNMENT/)。
 
 # Marshal 总览 — 默认规则矩阵
 
@@ -74,7 +74,7 @@ Counter.SetExactCounter(9223372036854775807n);
 | string | string / null | string、兼容 CLR string wrapper、null |
 | class/interface/object | ByObj，门面为声明类型 / null | 兼容 wrapper / null；object 额外接受受支持的基元装箱 |
 | enum | number | 范围合法的 number；兼容 boxed wrapper |
-| struct | ByVal 或同步链内 Opaque | 兼容 ByVal / boxed / 有效 Opaque，按 struct 规则复制 |
+| struct | 默认 ByVal；显式策略可用 Opaque | 兼容 ByVal / boxed / 有效 Opaque，按 struct 规则复制 |
 | Nullable\<T\> | null 或按 T 策略 | null/undefined 或可转换的 T |
 | T[] | ByObj / null | 兼容 CLR 数组、连续 JS Array 或 null |
 | 多维数组 | ByObj / null | 仅兼容 CLR 数组或 null |

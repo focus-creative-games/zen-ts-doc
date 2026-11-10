@@ -1,0 +1,126 @@
+{
+  "version.label": {
+    "message": "Next",
+    "description": "Localized documentation navigation: version.label"
+  },
+  "sidebar.docsSidebar.category.sidebar-getting-started": {
+    "message": "Getting started",
+    "description": "Localized documentation navigation: sidebar.docsSidebar.category.sidebar-getting-started"
+  },
+  "sidebar.docsSidebar.category.sidebar-getting-started.link.generated-index.title": {
+    "message": "Getting started",
+    "description": "Localized documentation navigation: sidebar.docsSidebar.category.sidebar-getting-started.link.generated-index.title"
+  },
+  "sidebar.docsSidebar.category.sidebar-getting-started.link.generated-index.description": {
+    "message": "Installation, your first script, and supported platforms.",
+    "description": "Localized documentation navigation: sidebar.docsSidebar.category.sidebar-getting-started.link.generated-index.description"
+  },
+  "sidebar.docsSidebar.category.sidebar-guides": {
+    "message": "Guides",
+    "description": "Localized documentation navigation: sidebar.docsSidebar.category.sidebar-guides"
+  },
+  "sidebar.docsSidebar.category.sidebar-guides.link.generated-index.title": {
+    "message": "Guides",
+    "description": "Localized documentation navigation: sidebar.docsSidebar.category.sidebar-guides.link.generated-index.title"
+  },
+  "sidebar.docsSidebar.category.sidebar-guides.link.generated-index.description": {
+    "message": "Installation, interop, TypeScript, builds, and everyday usage.",
+    "description": "Localized documentation navigation: sidebar.docsSidebar.category.sidebar-guides.link.generated-index.description"
+  },
+  "sidebar.docsSidebar.category.sidebar-concepts": {
+    "message": "Concepts",
+    "description": "Localized documentation navigation: sidebar.docsSidebar.category.sidebar-concepts"
+  },
+  "sidebar.docsSidebar.category.sidebar-concepts.link.generated-index.title": {
+    "message": "Concepts",
+    "description": "Localized documentation navigation: sidebar.docsSidebar.category.sidebar-concepts.link.generated-index.title"
+  },
+  "sidebar.docsSidebar.category.sidebar-concepts.link.generated-index.description": {
+    "message": "Design models, terminology, and evaluation.",
+    "description": "Localized documentation navigation: sidebar.docsSidebar.category.sidebar-concepts.link.generated-index.description"
+  },
+  "sidebar.docsSidebar.category.sidebar-compare": {
+    "message": "Evaluation",
+    "description": "Localized documentation navigation: sidebar.docsSidebar.category.sidebar-compare"
+  },
+  "sidebar.docsSidebar.category.sidebar-compare.link.generated-index.title": {
+    "message": "Evaluation",
+    "description": "Localized documentation navigation: sidebar.docsSidebar.category.sidebar-compare.link.generated-index.title"
+  },
+  "sidebar.docsSidebar.category.sidebar-compare.link.generated-index.description": {
+    "message": "Capabilities, constraints, and evaluation without unsupported performance rankings.",
+    "description": "Localized documentation navigation: sidebar.docsSidebar.category.sidebar-compare.link.generated-index.description"
+  },
+  "sidebar.docsSidebar.category.sidebar-reference": {
+    "message": "API reference",
+    "description": "Localized documentation navigation: sidebar.docsSidebar.category.sidebar-reference"
+  },
+  "sidebar.docsSidebar.category.sidebar-reference.link.generated-index.title": {
+    "message": "API reference",
+    "description": "Localized documentation navigation: sidebar.docsSidebar.category.sidebar-reference.link.generated-index.title"
+  },
+  "sidebar.docsSidebar.category.sidebar-reference.link.generated-index.description": {
+    "message": "JsAppDomain, attributes, zents, and csharp: reference.",
+    "description": "Localized documentation navigation: sidebar.docsSidebar.category.sidebar-reference.link.generated-index.description"
+  },
+  "sidebar.docsSidebar.category.sidebar-spec": {
+    "message": "Specification",
+    "description": "Localized documentation navigation: sidebar.docsSidebar.category.sidebar-spec"
+  },
+  "sidebar.docsSidebar.category.sidebar-spec.link.generated-index.title": {
+    "message": "Specification",
+    "description": "Localized documentation navigation: sidebar.docsSidebar.category.sidebar-spec.link.generated-index.title"
+  },
+  "sidebar.docsSidebar.category.sidebar-spec.link.generated-index.description": {
+    "message": "Interop contracts aligned with implementation and tests.",
+    "description": "Localized documentation navigation: sidebar.docsSidebar.category.sidebar-spec.link.generated-index.description"
+  },
+  "sidebar.docsSidebar.category.属性分派（metatable）": {
+    "message": "Member dispatch",
+    "description": "Localized documentation navigation: sidebar.docsSidebar.category.属性分派（metatable）"
+  },
+  "sidebar.docsSidebar.category.属性分派（metatable）.link.generated-index.description": {
+    "message": "Wrapper layout, property lookup, and binding.",
+    "description": "Localized documentation navigation: sidebar.docsSidebar.category.属性分派（metatable）.link.generated-index.description"
+  },
+  "sidebar.docsSidebar.category.Marshal": {
+    "message": "Marshal",
+    "description": "Localized documentation navigation: sidebar.docsSidebar.category.Marshal"
+  },
+  "sidebar.docsSidebar.category.Marshal.link.generated-index.description": {
+    "message": "Parameter and type marshaling between C# and JavaScript.",
+    "description": "Localized documentation navigation: sidebar.docsSidebar.category.Marshal.link.generated-index.description"
+  },
+  "sidebar.docsSidebar.category.构建": {
+    "message": "Build integration",
+    "description": "Localized documentation navigation: sidebar.docsSidebar.category.构建"
+  },
+  "sidebar.docsSidebar.category.构建.link.generated-index.description": {
+    "message": "Official static V8 SDKs, read-only installation, callbacks, Inspector, and WebGL/WeChat HostJs.",
+    "description": "Localized documentation navigation: sidebar.docsSidebar.category.构建.link.generated-index.description"
+  },
+  "sidebar.docsSidebar.category.sidebar-community": {
+    "message": "Community",
+    "description": "Localized documentation navigation: sidebar.docsSidebar.category.sidebar-community"
+  },
+  "sidebar.docsSidebar.category.sidebar-community.link.generated-index.title": {
+    "message": "Community",
+    "description": "Localized documentation navigation: sidebar.docsSidebar.category.sidebar-community.link.generated-index.title"
+  },
+  "sidebar.docsSidebar.category.sidebar-community.link.generated-index.description": {
+    "message": "FAQ, testing, migration, and contact information.",
+    "description": "Localized documentation navigation: sidebar.docsSidebar.category.sidebar-community.link.generated-index.description"
+  },
+  "sidebar.architectureSidebar.category.sidebar-impl": {
+    "message": "Architecture and implementation",
+    "description": "Localized documentation navigation: sidebar.architectureSidebar.category.sidebar-impl"
+  },
+  "sidebar.architectureSidebar.category.sidebar-impl.link.generated-index.title": {
+    "message": "Architecture and implementation",
+    "description": "Localized documentation navigation: sidebar.architectureSidebar.category.sidebar-impl.link.generated-index.title"
+  },
+  "sidebar.architectureSidebar.category.sidebar-impl.link.generated-index.description": {
+    "message": "Mono and IL2CPP implementation notes; the specification defines behavior.",
+    "description": "Localized documentation navigation: sidebar.architectureSidebar.category.sidebar-impl.link.generated-index.description"
+  }
+}

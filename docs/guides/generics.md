@@ -1,89 +1,46 @@
 ---
 sidebar_position: 15
-title: 泛型
-description: 闭合泛型类型与泛型方法在 JS 侧的构造与调用。
+title: "泛型类型与方法"
 ---
 
-# 泛型
+# 泛型类型与方法
 
-用 `zents.make_generic_type` 得到 **闭合** 泛型类型对象，再像普通类型一样构造与调成员。数组见 [数组](/docs/guides/arrays/)。权威：[05-LIB](/docs/spec/05-LIB/)、[类型系统](/docs/spec/02-TYPE-SYSTEM/)。
+类型泛型和方法泛型分别闭合。Editor 可反射查找不代表 IL2CPP 已有对应 AOT 实例。
 
-开放泛型定义本身 **不可** 直接 `new` 实例化。
-
-## 闭合泛型类型
-
-未闭合定义须带 **反引号 arity**：``List`1``、``Dictionary`2``。
+## 泛型类型
 
 ```javascript
-const ListInt = zents.make_generic_type(
-  CSharp.mscorlib['System.Collections.Generic.List`1'],
-  zents.types.int32
-);
-
-const list = new ListInt();
-list.Add(10);
-list.Add(20);
+const List = CSharp['mscorlib']['System.Collections.Generic.List`1'];
+const IntList = zents.make_generic_type(List, zents.types.int32);
+const values = new IntList();
+values.Add(7);
 ```
 
-```javascript
-const DictStrInt = zents.make_generic_type(
-  CSharp.mscorlib['System.Collections.Generic.Dictionary`2'],
-  zents.types.string,
-  zents.types.int32
-);
-
-const dict = new DictStrInt();
-dict.Add("hp", 100);
-```
-
-亦可配合 `csharp:` 模块：
-
-```javascript
-import { List } from "csharp:mscorlib/System.Collections.Generic";
-
-const ListInt = zents.make_generic_type(List, zents.types.int32);
-const list = new ListInt();
-```
-
-第一个参数为 **泛型定义类型对象**，其后为类型实参（`zents.types.*`、类型对象、名称字符串等，见 [typeArg](/docs/spec/05-LIB/)）。相同实参 **intern** 同一类型对象。
-
-也可用 AQN 一次解析闭合类型：
-
-```javascript
-const ListInt2 = zents.get_type_from_name(
-  "System.Collections.Generic.List`1[[System.Int32, mscorlib]]"
-);
-```
+公共 typeArg 接受 CLR 类型对象、完整 CLR 类型名和 System.Type wrapper。`zents.types.int32` 是名称常量；它不是 JavaScript number 的构造器。
 
 ## 泛型方法
 
-方法 **自身** 带类型参数（如开放 `Foo<T>`）时，用 `zents.make_generic_method` 得到单态化 **direct function**：
+假设 Demo 定义了 `static T Echo<T>(T value)`：
 
 ```javascript
-const bar_int = zents.make_generic_method(MyType.GenericBar, zents.types.int32);
-bar_int(obj, 42);   // 注意：提取后的调用须自行保证 this 约定；优先保持方法调用形态
+const Demo = CSharp['Assembly-CSharp']['Demo'];
+const echoInt = zents.inflate(Demo, 'Echo', zents.types.int32);
+echoInt(7);
 ```
 
-| 规则 | 说明 |
-|------|------|
-| 第一参 | 类型对象上的 **direct** method function |
-| 传入 **dispatch** | **throw** |
-| 已闭合类上的普通方法（如 `List<int>.Add`） | **不**走此路径 |
+`inflate` 显式接收已闭合声明类型和方法键，只闭合方法自身泛型参数。静态 closure 直接调用，实例 closure 用 `.call(receiver, ...)`。
 
-见 [类型系统](/docs/spec/02-TYPE-SYSTEM/)、[05-LIB §9](/docs/spec/05-LIB/)。
+另一种写法是泛型类型实参前缀（GTAP）：
 
-## 常见错误
+```javascript
+const Int32 = CSharp['mscorlib']['System.Int32'];
+Demo.Echo(zents.typeof(Int32), 7);
+```
 
-| 现象 | 处理 |
-|------|------|
-| arity 错误 | 检查 `` `1 `` / `` `2 `` 与实参个数 |
-| `List` 找不到 | 使用 `System.Collections.Generic.List`1`` 全名 + 括号键 |
-| 对开放定义直接 `new` | 先 `make_generic_type` |
-| 对 dispatch 调 `make_generic_method` | 先消歧为 direct（全签名键 / 单候选） |
+**GTAP 前缀只接受 System.Type wrapper**，不把类型名字符串或任意 JS 值猜成泛型参数。`zents.typeof` 与 JS 的 `typeof` 运算符不同。
 
-## 相关文档
+## 约束和竞争
 
-- [zents 库规范](/docs/spec/05-LIB/)
-- [类型系统](/docs/spec/02-TYPE-SYSTEM/)
-- [数组](/docs/guides/arrays/)
-- [zents 标准库](/docs/guides/zents-lib/)
+泛型约束、声明类型闭合状态、普通重载与泛型候选都参与验证；出现歧义时显式 inflate 或用全签名键。已删除的 `make_generic_method` 不再是兼容入口。
+
+IL2CPP 需要预先保留对应闭合类型/方法及桥；无法仅凭运行时 typeArg 凭空生成 native 代码。详见[类型系统](../spec/02-TYPE-SYSTEM.md)和[重载规范](../spec/04-METHOD-OVERLOAD.md)。

@@ -3,81 +3,63 @@ sidebar_position: 11
 title: "版本、安装与构建"
 ---
 
-> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
+# 版本、安装与构建
 
-# 11 — 版本、安装与构建
+## 1. 支持政策
 
-## 1. 两条版本轴
+Unity **2022.3.x LTS 及之后的 LTS**，以及基于 2022.3 的团结引擎。普通非 LTS、Unity 2021.3、其他原生平台和其他小游戏 SDK 不因存在兼容代码而自动获得支持。具体 Editor/平台组合需独立验证。
 
-Unity/团结的 CLR 工具链版本，与 JS backend 的版本分开管理。目标 backend 为 Native V8 或 HostJs；QuickJS 仅为过渡实现。不得继续把 quickjsVersionId 定义成长期产品的唯一引擎选择。
+Unity/CLR 工具链版本与 JS 引擎版本是两条轴：原生 V8 由锁定 SDK 决定，HostJs 来自平台 VM。QuickJS 已移除，无引擎切换/回退设置。
 
-目标 Unity 起点为 Unity 2022.3.x 与团结对应目标；其他版本存在 patch 不等于该组合已通过 V8/HostJs 验收。
+## 2. 源码与产物布局
 
-## 2. 包内布局
+| 路径 | 职责 |
+|---|---|
+| Runtime/Mono/Engine、Engine/V8 | managed 引擎契约及 Editor V8 ABI |
+| Runtime/Mono/Binding | Mono CLR 绑定计划 |
+| ZenTS~/zents-runtime/engine | 自有接口、V8/HostJs 适配器 |
+| ZenTS~/zents-runtime/binding、bridge、marshal、mt、jvm | CLR 计划与执行 |
+| Plugins/WebGL/HostEngine.jslib | 平台 JS/WASM 同步协议 |
+| ZenTS~/v8 | 来源锁、SDK 构建和导入工具，不含二进制库 |
+| ZenTS~/patches/libil2cpp | Unity/团结兼容补丁 |
+| ZenTS~/debugger | Inspector 连接配置与使用说明 |
 
-```text
-Runtime/Mono/Engine/             # managed 引擎和值/回调契约
-Runtime/Mono/Engine/QuickJs/     # 当前过渡 P/Invoke 与 gate
-Runtime/Mono/Binding/            # CLR 元数据计划
-ZenTS~/zents-runtime/
-  engine/EngineApi.h             # 自有 C++ API
-  engine/quickjs/                # 当前适配器
-  binding/BindingPlan.h          # 无 SDK 依赖的 CLR 计划
-  bridge/ marshal/ mt/ jvm/      # 使用自有 API 的互操作执行层
-  hostjs/                       # 当前仍有原型，待 P4
-  generated/                    # 安装/Generate 输出
-ZenTS~/v8/build.py               # P1 构建配方
-ZenTS~/patches/libil2cpp/         # Unity 版本差异
-ZenTS~/migration/                # P0/P1 基线与验证凭据
-```
+包不携带完整 stock libil2cpp 或 V8 源码树。生成代码及库安装到项目本地工具链，不写只读 package。
 
-目标 Native V8 产物及适配器在 P2 加入，HostJs glue/bundle 在 P4/P6 加入。包不携带完整 stock libil2cpp 树。QuickJS vendored 源及插件当前仍存在，替代后删除。
+## 3. 只读 UPM 与 SDK
 
-## 3. 安装流水线
+Git URL 安装是正常受支持方式，不强制嵌入 Packages。通过 PackageInfo.resolvedPath 定位包，不硬编码缓存哈希路径。
 
-目标流水线先确定 BuildTarget、CLR 宿主、backend、OS/CPU 和 manifest；复制 stock Il2Cpp，应用匹配补丁，安装自有 runtime，再纳入对应 backend 依赖和生成表，验证并写指纹。
+SDK 位于 `Library/ZenTS/NativeSDK/<指纹>/<target>`，索引为 installed.json；构建目录位于 Library/ZenTS/NativeBuild。Editor 插件及稳定 GUID meta 自动生成到 `Assets/ZenTSGenerated/Native/<target>`，仅匹配 OS/CPU 的 Editor 使用。
 
-- Native V8 只安装匹配 headers/defines/库，不把 V8 C++ ABI 暴露给 Mono。
-- HostJs 不安装额外 VM，接入 WASM import/export、平台启动脚本与 JS 包。
-- 当前 P1 的 Install 仍安装 QuickJS 过渡依赖，不能因文档写了目标流程就省去实际需要的库。
-- Define/目标切换须在实际编译前完成；不允许 manifest、C# 分支与 native 分支选择不一致。
+SDK 校验固定官方提交、来源、ABI、目标、适配器源码身份和文件哈希。源码身份允许 CRLF/LF 差异，二进制逐字节校验。已加载 DLL/dylib 不原地覆盖；导入更新后重启 Editor 激活。删除 Library 后重新导入，不以 Assets 残留插件绕过校验。
 
-## 4. libil2cpp patch
+生成的原生库和 Native meta 不提交源码 Git，源码 `.meta` 正常提交。CI 可分发完整 SDK；每个项目本地校验导入。
 
-在对应 major.minor 系列内选择不大于 Editor 版本的最高 floor patch；Unity 6 可按现有规则回退 major 系列。无可用 patch、上下文不匹配或团结差异无法确认均失败，不静默套另一版本。后缀版本与团结 API 差异分别记录。
+## 4. Install 与补丁
 
-引擎修改尽量限定 hook 与 Compatible shim；业务类型绑定逻辑留在 ZenTS runtime，不分发整棵修改版 libil2cpp 作为默认维护方式。
+ZenTS/Install 复制 stock IL2CPP、应用版本匹配补丁、安装 ZenTS runtime 和生成/链接配置，输出到 `Library/ZenTS/LocalIl2CppData-<Editor平台>`。
 
-## 5. V8 revision 与产物
+同 major.minor 内选择不大于 Editor 版本的最高 floor patch；Unity 6 可按既有规则回退 major 系列。上下文失配、无补丁或团结差异无法确认必须失败。补丁存在不证明对应版本已经完整运行。
 
-完整 revision、编译器/SDK、GN 参数、CPU/OS、JITless、snapshot、ICU 和二进制哈希组成产物身份。不能把 API 兼容推定为二进制兼容。构建配方存在不代表库已构建或该平台已运行，见 [V8](./build/02-V8.md)。
+核心绑定逻辑留在 ZenTS runtime，IL2CPP 修改限定于必要 hook 和 Compatible shim，不默认分发整棵私改引擎。
 
-## 6. HostJs 能力版本
+## 5. 链接与目标选择
 
-宿主 VM 不能由包统一 pin；记录平台/SDK/Unity、模板版本、启动方式和能力要求。number、bigint、Promise、Proxy 以及弱引用能力分开检测；BigInt 只有显式策略使用，缺所需能力时明确失败，不能静默降为 number。
+原生 Player 静态链接 V8/适配库；iOS 使用 JITless、导出库到 Xcode。Win64 VS 导出携带所需静态库，可脱离原工程做 native 增量构建。WebGL/微信不链接 V8，接入 HostJs glue、模块工厂与平台 bootstrap。
 
-## 7. Define 与后端选择
+托管选择 Editor 优先，其余按 WebGL、明确的 WeixinMiniGame 宏/target 或显式 ZENTS_HOST_JS。不能仅因名字包含 MiniGame 就判定已支持。C# 分支、native 编译与 bundle/manifest 必须一致，不依赖构建已开始后才修改 define 来改变本次编译。
 
-当前 ZENTS_QUICKJS、ZENTS_HOST_JS 等属于过渡构建接线。目标选择由平台适配和构建产物共同决定，不能公开一个允许在活跃域任意切换引擎的 Settings 开关。业务 Marshal 行为不按宏分裂。
+## 6. Generate 和配置
 
-## 8. AOT 元数据与 XML
+`ZenTS/Generate Xml Bindings` 生成 MarshalAs、Alias、Extension 的 C++ 配置表；`ZenTS/Generate Typings` 生成声明。共享调用桥由运行时及 AOT 代码支持，不能把这两个菜单描述成任意泛型/签名机器码生成器。XML 仅用于 AOT 程序集，Editor 初始化快照、Player 烘焙；没有运行时 XML 注册/热更新/Reload，Reset 不重新加载。热更新程序集采用 Attribute，不由本文承诺任意 DLL 热加载能力。
 
-Alias、MarshalAs、Extension XML 仅配置 AOT 程序集；Editor 初始化消费配置快照，Il2Cpp Generate 烘焙。修改配置需要重新初始化编辑会话/Generate/构建，不支持 Player 解析、运行时注册、热更或 Reload。热更新程序集使用 Attribute，不能把其 XML 偷放进安装配置。
+## 7. 缓存与增量
 
-## 9. 指纹与诊断
+缓存身份包括包/源码、Unity/团结、目标/CPU、backend/版本、补丁、配置与生成输入。头文件宏必须匹配链接库。改变影响输入必须失效相关缓存，不能仅比较库文件名。
 
-至少记录包版本、Unity/团结标识、目标/CPU、backend/版本、补丁选择、配置与生成输入哈希，以及引擎产物哈希。切换 backend、更新头文件/库或影响生成表的配置后，必须使相关缓存失效。加载中的 Editor 原生插件不能当成可可靠热替换资源。
+仅 C++ runtime 改动可同步到 Win64 导出工程并增量编译，保留该导出的 generated。C# 类型、InternalCall、fixture 或生成输入变化时重新 Generate/导出；新增库/编译选项也需更新工程。
 
-## 10. 验收矩阵
+## 8. 验收登记
 
-Windows Editor 与既有 Win64 导出的 P1 过渡实现已有记录。V8、macOS、Android、iOS、WebGL 和微信必须逐项构建与运行，不使用“所有 Il2Cpp 平台”作为完成声明。
-
-## 11. Win64 增量迭代
-
-测试工程嵌入包为工作副本。仅 C++ runtime 改动时，同步到 Build-Win64 的 libil2cpp/zents（保留 generated）并增量编译；不必每轮重新 Generate/导出。新增库、项目结构或编译选项时更新工程。
-
-影响 Player 的 C#、InternalCall、程序集、生成表或测试 fixture 改动时重新编译并按需 Generate/导出。仅 Editor Mono 内部源码变化不要求重导 Player，但必须单独跑 Editor。导出产物与当前 C# 源码各有自己的测试基线，不能混记。
-
-## 12. 配置头与 SDK 边界
-
-ZenTSConf.inc 提供 Unity/团结及构建身份；Il2CppCompatible 处理 CLR API 差异。ZenTSCommon 包含自有 EngineApi 与 CLR shim；核心不再通过 QuickJsCompatible 暴露 SDK。生成头不能定义与实际链接库不匹配的 V8 特性宏。
+分别登记脚本存在、源码编译、SDK 安装、真实运行和干净退出。macOS/Android/iOS/WebGL/微信结果有各自范围，不能用“全部 IL2CPP 平台”代替。详见[对齐状态](03-ALIGNMENT.md)与[平台矩阵](../getting-started/compatibility.md)。

@@ -3,13 +3,13 @@ sidebar_position: 16
 title: "Unity 优化"
 ---
 
-> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
+> 本页定义当前互操作契约；平台验收范围与已知限制见[对齐状态](/docs/spec/03-ALIGNMENT/)。
 
 # 16 — Unity 优化
 
-本页对应 ZLua 的 Unity 优化语义。目标总开关为 Settings.enableUnityOptimizations，默认开启；当前 ZenTS P1 尚未移植此能力。
+本页对应 ZLua 的 Unity 优化语义。总开关为 Settings.enableUnityOptimizations，默认开启；当前已实现并纳入对照测试。
 
-## 1. 当前目标范围
+## 1. 当前范围
 
 仅 UnityEngine.CoreModule 的 GameObject 与 Component 声明上的 GetComponent 系列三个重载。GetComponentInChildren、GetComponentInParent、AddComponent 不在本批范围内。
 
@@ -19,7 +19,7 @@ title: "Unity 优化"
 
 ## 3. 开关开启
 
-在用户 Alias/MarshalAs XML 前加入包内 AOT 配置，目标语义：
+在用户 Alias/MarshalAs XML 前加入包内 AOT 配置，规则：
 
 | CLR 重载 | JS 短名 |
 |---|---|
@@ -43,4 +43,4 @@ Editor 在新会话初始化消费开关和配置；Player 在 Generate 烘焙�
 
 ## 5. 验收
 
-分别验证开关开/关、GetComponentT/N/Type 的选择、实际派生类型与接口门面、null、Alias 重复失败和 Mono/Il2Cpp 一致性。先完成 GTAP 与 ActualTypeUserData 后才能宣称 Unity 优化可用。
+分别验证开关开/关、GetComponentT/N/Type 的选择、实际派生类型与接口门面、null、Alias 重复失败和 Mono/Il2Cpp 一致性。GTAP、ActualTypeUserData 与这些配置共同验证，不能将本优化范围扩大到其他 Unity API。

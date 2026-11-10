@@ -1,130 +1,31 @@
 ---
 sidebar_position: 3
-title: 迁移
-description: 从其它 JS 方案迁入（用户向）。
+title: "迁移到当前 ZenTS"
 ---
 
-# 迁移
+# 迁移到当前 ZenTS
 
-从 **Puerts**、Unity JS 集成、其它宿主式 JS 方案迁到 ZenTS 时：先对齐 **模块加载与类型导出模型**，再替换调用点。  
-**契约全文**：[12-MIGRATION-ADAPTORS](/docs/spec/12-MIGRATION-ADAPTORS/)（本页是用户向摘要；冲突时以 spec 为准）。
+迁移时以当前 spec 和测试结果为准，不再保留旧接口作为第二套长期语义。先在 Editor 验证，再重新 Generate 和导出目标 Player。
 
-选型差异见 [特性对比](/docs/compare/FEATURES/)。
+| 旧用法/假设 | 当前做法 |
+|---|---|
+| QuickJS 插件、版本开关和脚本 | 移除，导入官方 V8 SDK；HostJs 不内嵌引擎 |
+| 原生库放 package 或提交 Git | SDK 安装 Library，Editor 插件与 meta 自动生成 Assets |
+| 动态 register_method | Attribute/AOT Alias XML 定义短名；短名绑定后冻结 |
+| make_generic_method(closure, ...) | inflate(已闭合声明类型, 方法键, ...类型实参) 或 GTAP |
+| out 输入占位 | 删除占位，解构返回元组 |
+| ref 新值作为返回元组元素 | 不再假设如此；按输入存储和原地修改规则处理 |
+| long/ulong 自动 bigint | 默认 number，需要时显式 BigInt |
+| Bytes 二进制 string | byte[] 与复制 Uint8Array |
+| XML 运行时注册/重载 | 仅 AOT 会话/构建配置；重新生成，不热更新 |
+| HostJs 任意源码字符串执行 | 构建静态工厂，所有模块变体预先打包 |
 
----
+## 从 ZLua 迁移
 
-## 1. 目标与非目标
+保留 CLR 绑定、候选、门面、配置和 AOT 设计，按 JS 语义改写业务表达：实例方法遵守 this；null/undefined 分开；out 使用数组元组；显式 BigInt；Table/Array/Uint8Array 各有规则；Promise 不等同 Lua 协程。
 
-### 目标
+不能把 Lua 的整数能力、二进制 string、longjmp 或 __gc 实现细节当作 JS 引擎接口。Opaque 借用不跨 await，事件需主动解除订阅。
 
-| 目标 | 说明 |
-|------|------|
-| **降低改写量** | 旧脚本可暂时继续 `CS.UnityEngine.GameObject` / `puerts.loadType(...)` 等 **类型获取** 形态 |
-| **白名单对齐旧框架** | 导出清单来自原 StaticWrapper / 生成配置 / 特性，而不是扫全量程序集 |
-| **不侵入 ZenTS 核心** | 适配为可选 ES module + Editor 导出工具；**不**改 `CSharp` / `csharp:` 语义 |
-| **一份 adaptor + 多方案 Export** | 共用 `adaptor.js`；Puerts 等各自 `ExportTypes.cs` 生成同构清单 |
+## 回归清单
 
-### 非目标（明确不做）
-
-| 项 | 说明 |
-|----|------|
-| **C#→JS** | `GetFunction` / `JsEnv.Eval` / `[JSFunction]` 等 **不在** adaptor 范围 → 须手改 |
-| **成员调用语义对齐** | 重载、Event、`ref`/`out`、Marshal 仍以 ZenTS spec 为准；adaptor **只**解决「类型表怎么拿到」 |
-| **泛型旧语法** | 如 `puerts.loadGeneric(...)` → 改写为 `zents.make_generic_type` |
-| **默认安装全局** | 须显式 `import` adaptor-init；**新项目不要装 adaptor**，直接用 `csharp:` |
-| **BlittableCopy / 指针模型** | 用 ZenTS exotic + Registry / `[JsMarshalAs]` |
-| **CommonJS `require`** | v1 仅 **ES module** |
-
-官方类型访问永远是：
-
-- `CSharp[assemblyName][typeFullName]`
-- `import { T } from "csharp:Assembly/…"`
-
-adaptor 只覆盖旧框架的 **全局命名空间链**。
-
----
-
-## 2. `CS.*` → `csharp:`（推荐终点）
-
-| 阶段 | 做法 |
-|------|------|
-| **过渡** | 复制包内 `ZenTS~/adaptors/` 的 `adaptor.js` + 对应 `ExportTypes.cs` → 生成 `*_export_types.js` → `initAdaptor(exportTypes)` |
-| **终点（新代码）** | `import { GameObject } from "csharp:UnityEngine.CoreModule/UnityEngine"` |
-| **低层等价** | `CSharp['UnityEngine.CoreModule']['UnityEngine.GameObject']` |
-
-```javascript
-// 过渡：adaptor 挂好 CS 后
-// const go = CS.UnityEngine.GameObject;
-
-// 终点：ZenTS 原生
-import { GameObject } from "csharp:UnityEngine.CoreModule/UnityEngine";
-const goType = GameObject; // 与 CSharp[...] 同一类型对象
-```
-
-```javascript
-// 推荐入口模块（示意）
-import exportTypes from './puerts_export_types.js';
-import { initAdaptor } from './adaptor.js';
-
-initAdaptor(exportTypes);
-```
-
-部署细节与清单字段见 [spec §2–§4](/docs/spec/12-MIGRATION-ADAPTORS/)。
-
----
-
-## 3. 推荐迁移流程
-
-```text
-1. 新工程接入 ZenTS（Install；Editor 跑通 js-demo / ts-demo 级冒烟）
-2. 复制 ExportTypes.cs → 旧工程 Editor；菜单生成 export_types.js
-3. 复制 adaptor.js + 清单到 moduleLoader 可解析目录；Initialize 后 import init
-4. 业务脚本先保留 CS.* 类型路径；逐个模块改为 ES import
-5. 手改：C#→JS → GetFunction；Event → add_/remove_；泛型 / ref / Marshal
-6. 删除 Puerts 运行时依赖；新脚本只写 csharp:，不再扩大 adaptor 清单
-7. Il2Cpp：Generate + Sync StreamingAssets；Editor 与 Player 双端冒烟
-```
-
----
-
-## 4. 改写清单（用户向）
-
-| 旧习惯（Puerts 等） | ZenTS |
-|---------------------|-----|
-| `CS.Ns.Type` / `loadType('T')` | adaptor **或** `csharp:` / `CSharp[…]` |
-| `puerts.loadGeneric(...)` | `zents.make_generic_type` |
-| `JsEnv.Tick` / 帧泵 | 宿主 **`JsFramePump`**（见 Host 规范） |
-| `BlittableCopy` | `[JsMarshalAs]` / 默认 Marshal |
-| `require('m')` | `import` + `moduleLoader` |
-| `obj:Method()`（若从 Lua 思维带来） | `obj.Method()` |
-| Eval / JsFunction 回调表 | **`JsAppDomain.GetFunction<T>`** + named export |
-| Event `+=` / 专用糖 | `add_Xxx` / `remove_Xxx`（同一引用） |
-| 读不到成员得 `undefined` | **strict miss → throw**；改逻辑 |
-| 程序集隐式默认 | ExportTypes / `csharp:` **必须写真实程序集名** |
-
-TypeScript 官方工作流 **不** 把 `CS` 全局当作一等公民；声明走 Generate Typings 的 `csharp:` modules。见 [TypeScript 工作流](/docs/guides/typescript-workflow/)。
-
----
-
-## 5. 验收（迁移是否「够用」）
-
-| # | 标准 |
-|---|------|
-| 1 | `initAdaptor` 后关键 `CS.*`（或全局链）能拿到与 `CSharp[…]` / `csharp:` **同一**类型对象 |
-| 2 | 未 `initAdaptor` 时无额外全局副作用 |
-| 3 | C#→JS 主路径已改为 `GetFunction`，业务不再依赖 Eval 字符串拼装 |
-| 4 | Event / ref / 未知成员行为符合 ZenTS guides，而非旧框架习惯 |
-| 5 | Il2Cpp Player 与 Editor 冒烟一致 |
-
-完整验收表见 [spec §9](/docs/spec/12-MIGRATION-ADAPTORS/)。
-
----
-
-## 相关文档
-
-| 文档 | 内容 |
-|------|------|
-| [12-MIGRATION-ADAPTORS](/docs/spec/12-MIGRATION-ADAPTORS/) | 适配器契约 |
-| [特性对比](/docs/compare/FEATURES/) | 语义差异与检查清单 |
-| [FAQ](/docs/community/faq/) | 高频问题 |
-| [测试](/docs/community/testing/) | 双端冒烟与最小复现 |
+先清理已移除 API 使用和旧测试期望；确认 SDK 身份；校验 Alias/XML 冲突、声明生成、重载和数值边界；在目标 Player 验证 GC、异常、Reset 与泛型。详细兼容决策见[规范迁移页](../spec/12-MIGRATION-ADAPTORS.md)。

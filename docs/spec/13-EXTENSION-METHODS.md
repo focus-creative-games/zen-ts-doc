@@ -3,7 +3,7 @@ sidebar_position: 13
 title: "C# Extension 方法"
 ---
 
-> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
+> 本页定义当前互操作契约；平台验收范围与已知限制见[对齐状态](/docs/spec/03-ALIGNMENT/)。
 # 13 — C# Extension 方法
 
 > 约定如何把 C# **extension methods** 暴露到被扩展类型的 JavaScript **实例** method 表（`obj.ExtMethod(args)` 方法调用绑定 `this`）。

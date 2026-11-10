@@ -3,7 +3,7 @@ sidebar_position: 12
 title: "Class / Interface Marshal"
 ---
 
-> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
+> 本页定义当前互操作契约；平台验收范围与已知限制见[对齐状态](/docs/spec/03-ALIGNMENT/)。
 # Class / Interface Marshal
 
 > **规范性：** 引用类型（`class`、`interface`、`string`、数组实例、delegate 实例等）在 JavaScript 与 C# 之间的默认 Marshal 规则。

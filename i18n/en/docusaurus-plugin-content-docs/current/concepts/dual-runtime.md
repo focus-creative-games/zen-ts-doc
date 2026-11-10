@@ -1,102 +1,27 @@
 ---
 sidebar_position: 3
-title: 双运行时
-description: Mono Editor 与 Il2Cpp Player 的实现分工。
+title: "CLR hosts and JS backends"
 ---
 
-# 双运行时
+# CLR hosts and JS backends
 
-:::tip 谁该读本文
-**需要理解「为何 Editor 与 Player 实现不同、但脚本行为一致」的开发者。** 日常开发流程见 [Editor 与 Player](/docs/guides/editor-vs-player/)；构建见 [构建指南](/docs/guides/build/)。
-:::
-
-ZenTS 维护 **一份** JS 可见语义契约（`spec/**`），两套实现：
-
-| 环境 | 程序集 / 实现 | 桥接方式 |
-|------|---------------|----------|
-| **Unity Editor** | `ZenTS.Mono` | Expression Tree / Emit + Exotic 分派 |
-| **Il2Cpp Player** | `ZenTS.Il2Cpp` + `libil2cpp/zents`（包内 `ZenTS~/zents-runtime`） | C++ MethodBridge + ReducedType stub |
-| **WebGL Player** | 同上，脚本引擎换成 HostJs | 同一套 C++ MethodBridge；业务脚本在页面 JS 引擎 |
-
-公共门面与特性在 `ZenTS.Common`：`JsAppDomain`、`[JsMarshalAs]`、`[JsAlias]`、`[JsExtension]` 等。
+Editor/Player CLR execution paths and V8/HostJs backends are separate dimensions, not separate sets of interop semantics.
 
 ```text
-flowchart LR
-  subgraph Editor["Unity Editor"]
-    Mono["ZenTS.Mono"]
-    Emit["Expression Emit"]
-  end
-
-  subgraph Player["Il2Cpp Player"]
-    Native["C++ MethodBridge"]
-    Stub["generated stubs"]
-  end
-
-  QJS["QuickJS"] --> Mono
-  QJS --> Native
-  Mono --> Emit
-  Native --> Stub
+JsAppDomain → IJsRuntime
+  Editor        → Mono + Emit    → V8 Editor plugin
+  Native Player → IL2CPP + C++   → static V8
+  Web Player    → IL2CPP/WASM    → platform JS VM
 ```
 
-## 权威与日常分工
+The Editor selects Mono even with WebGL as the active build target. Native Players enter IL2CPP through internal calls; HostJs Players bridge to their platform VM. Business code uses the same JsAppDomain, CSharp, and zents interfaces.
 
-| 角色 | 说明 |
-|------|------|
-| **Player（Il2Cpp）** | 发版与性能权威：非 WebGL 内嵌 QuickJS；WebGL 用宿主 JS（[06-HOSTJS](/docs/spec/build/06-HOSTJS/)）。两边都是 C++ 直桥、签名 stub 复用（需 Generate） |
-| **Editor（Mono）** | 快速迭代：反射 + Emit；目录与语义对齐 Il2Cpp |
+## Shared and specialized code
 
-**契约：** Mono 允许更慢的实现路径，但脚本可观察行为（调用结果、异常、Marshal、miss）**必须与 Il2Cpp 一致**。
+Type resolution, plans, overloads, policies, views, and lifecycle contracts are shared. Module execution, handles, GC notifications, errors, and jobs are adapter-specific. V8 SDK types stay outside CLR plans.
 
-```text
-                    JsAppDomain.Initialize(moduleLoader)
-                                    │
-                    ┌───────────────┴───────────────┐
-                    ▼                               ▼
-            ZenTS.Mono (Editor)               ZenTS.Il2Cpp (Player)
-            JsMonoAppDomain                 JsIl2CppAppDomain
-                    │                               │
-        三表 exotic 分派 / Emit 桥          libil2cpp/zents (C++)
-                    │                               │
-                    └───────────────┬───────────────┘
-                                    ▼
-                         同一 JS 可见语义 (spec/**)
-```
+HostJs calls are synchronous JS/WASM operations, not remote RPC. Modules compile into factories. Reset rebuilds ZenTS-owned instances and generations without destroying the platform VM.
 
-## Il2Cpp 源码落点
+## Validation
 
-| 路径 | 内容 |
-|------|------|
-| `libil2cpp/quickjs` | 非 HostJs 目标的 QuickJS 源码（Install 叠加）。WebGL 不创建该目录 |
-| `libil2cpp/zents` | ZenTS native（来自包内 `ZenTS~/zents-runtime`） |
-
-开发期可编辑参考常见于：`build-win64/.../libil2cpp/zents`。
-
-## 开发者需要记住的事
-
-1. **日常在 Editor 写脚本与调试**；发版前走 Il2Cpp Generate + Player 验证。
-2. **`GetFunction` / `CSharp` / `csharp:` / Marshal 规则两边相同**——不要为「Editor 能跑」写依赖反射 quirk 的脚本。
-3. **`Reset` 在 EndOfFrame 真正拆域**；旧 Delegate 在 Reset 后作废（见 [01-HOST-API](/docs/spec/01-HOST-API/)）。
-4. TypeScript 只影响编辑期；运行时 **只** 加载 emit 后的 ES module。
-
-:::info 状态
-<span class="runtimeBadge"><span class="runtimeBadgeMono">Mono · 已完成</span><span class="runtimeBadgeIl2cpp">Il2Cpp · 已完成</span></span>
-
-日常在 Editor 开发；发版与性能以 Il2Cpp Player 为准。详见 [项目状态](/docs/getting-started/project-status/)。
-:::
-
-## 学习路径
-
-| 步骤 | 文档 |
-|------|------|
-| 1. 理解语义契约 | [规范总览](/docs/spec/00-OVERVIEW/) |
-| 2. 日常 Editor↔Player 差异 | [Editor 与 Player](/docs/guides/editor-vs-player/) |
-| 3. 实现细节（可选） | [Mono 实现](/docs/impl/MONO/) · [Il2Cpp 实现](/docs/impl/IL2CPP/) |
-| 4. 构建与 Install | [构建](/docs/guides/build/) · [11-MULTI-VERSION](/docs/spec/11-MULTI-VERSION/) |
-
-## 相关文档
-
-- [规范总览](/docs/spec/00-OVERVIEW/)
-- [Il2Cpp 实现](/docs/impl/IL2CPP/)
-- [Mono 实现](/docs/impl/MONO/)
-- [Editor 与 Player](/docs/guides/editor-vs-player/)
-- [实现总览](/docs/impl/overview/)
+Compare fixtures across Mono/IL2CPP and V8/HostJs. Explicitly record unavailable platform capabilities, without skipping required interop to hide errors. See [testing](../community/testing.md).

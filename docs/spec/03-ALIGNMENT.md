@@ -3,66 +3,61 @@ sidebar_position: 3.5
 title: "ZLua 对齐与实现状态"
 ---
 
-# 03 — ZLua 对齐与实现状态
+# ZLua 对齐与实现状态
 
-## 1. 规范与实现的边界
+ZenTS 沿用 ZLua 的 CLR 互操作设计，并为 JavaScript 的语言语义和宿主能力作适配。本页说明两者的关系及当前支持范围。
 
-本目录规定已经接受的目标设计；“必须”描述交付后的行为，不代表当前包已实现。实现状态只按源码和运行证据登记，不按旧文档中的“已支持”推定。
+## 1. 设计原则
 
-本次中文规范直接维护在 `zen-ts-doc/docs/spec`。历史 `sync-spec` 指向 `ZenTSTest/Docs/spec`，当前该来源不可用；恢复同步前须先确定并更新唯一来源，不能用旧快照覆盖本文。本站其他指南或参考页与本目录冲突时，以本目录及本页状态表为准。本轮不更新英文翻译。
+CLR 类型、成员绑定、重载、Marshal、生命周期和 AOT 配置遵循 ZLua 的设计。JavaScript 特有的 this、undefined、数值、模块和异步行为按下文定义；不机械复制 Lua 的语言机制。具体使用限制以对应规范和平台说明为准。
 
-## 2. ZLua 基线
+## 2. 当前能力
 
-| 项目 | 基线 revision |
+| 能力 | 实现 |
 |---|---|
-| ZLua 代码 | `b029c9d7176b08e9b7aecf484df2960adf10f53b` |
-| ZLua 中文规范 | `6bb39ce5fdb8cfc7d3849ba78292d914ec9f50e0` |
-| ZenTS 规范修改前版本 | `b8a053cd947cd1270cb9de07481e4e565103d943` |
+| JS 引擎 | 官方原始 V8 13.6.233.17 静态 SDK；WebGL/微信平台 VM；QuickJS 已移除 |
+| CLR 内核 | Mono/Emit、IL2CPP 静态桥；共享类型、绑定计划和语义 |
+| 重载与泛型 | 全签名懒解析、冻结短名、inflate/GTAP、params/可选参数 |
+| Marshal | out 零输入元组、显式 BigInt、Bytes/Uint8Array、声明门面/ActualType |
+| 配置 | AOT XML 快照/生成表、Attribute 优先、Unity GetComponent 优化 |
+| 分发 | 只读 UPM、Library SDK、Assets 插件及自动稳定 meta |
+| HostJs | 静态模块工厂、二进制同步桥、GC/Reset/Unicode、微信转换集成 |
+| 调试 | Editor 原生 V8 Inspector；HostJs 使用平台工具 |
 
-P0 的文件 SHA256、规则与章节台账位于嵌入包 `ZenTS~/migration`。后续 ZLua 规则变化须更新来源、差异原因及对照测试。ZLua 文档内部有冲突时，应结合源码和针对性测试确认，不能任选一篇旧摘要覆盖新规则。
+## 3. 最新计数和平台边界
 
-## 3. 当前实现状态
+截至 2026-11-10，记录中的 Windows Editor、macOS arm64 Editor 和 Win64 均为 **435 个命名用例通过**。Editor Smoke 8/8，Player Smoke 10/10，TS 示例 3/3。Chrome WebGL 和微信开发者工具为 **434 通过、1 个托管工作线程用例显式跳过**，Smoke 10/10、TS 3/3。
 
-| 能力 | 当前事实 | 后续阶段 |
-|---|---|---|
-| CLR 计划 / 引擎边界 | P1 已拆分；原执行路径通过自有 API | 后端接入继续使用该边界 |
-| QuickJS | 仍为当前过渡实现，未移除 | V8 验收后清理，最终不提供回退 |
-| Win64 / Windows Editor V8 | 尚未实现和运行验收 | P2 |
-| V8 构建脚本 | 5 组 dry-run 通过；未构建 V8 库，未选定发行 revision | P2 |
-| 新重载 / params / out / BigInt 标注 / ActualType | 目标契约已确认，当前仍有旧规则 | P3 |
-| HostJs | 现有 GetFunction、通用 dispatch 等仍为原型/桩 | P4 |
-| macOS / Android / iOS V8 | 未验收；iOS 目标使用 JITless | P5 |
-| 微信小游戏发布 | 未验收；不能以 WebGL 概念兼容替代真机验证 | P6 |
+测试按独立命名用例计数，模块通过数和 Smoke/TS 示例单独统计；这些数量不代表分支覆盖率或所有设备的兼容性。
 
-P1 实际回归：Windows Editor Mono smoke 8/8、JS 套件 55/55；既有 Win64 导出 Player smoke 10/10、JS 套件 55/55、TS demo 3/3。当前源码中的 Player 子集 runner 列表为 12 项，不能把旧导出的 55 套结果当作该新列表已重新导出验收。没有修改测试期望或通过跳过互操作用例制造通过。
+macOS arm64/x64 Player、Android x64/arm64 模拟器和 iOS x64 模拟器已有运行验证，但尚未覆盖最新完整用例集。macOS x64 Player 使用 Rosetta；Android arm64 为模拟器转译；iOS arm64 仅无签名编译，不是手机验收。
 
-## 4. 对齐规则
+微信在 Unity 2022.3.62f3、官方转换 SDK 202610200817、开发者工具 2.01.2510260、基础库 3.17.6 下验收。未覆盖手机真机和上传发布。团结引擎已支持，Editor 使用原生 V8，WebGL/微信使用 HostJs。Unity 支持政策为 2022.3.x 及后续 LTS、基于 2022.3 的团结；存在补丁不等于该版本已跑全测试。
 
-- 全签名键按需懒解析，含单候选、继承及被 Alias 换名的方法；不是预挂所有签名。
-- 短名 Bind 后冻结，取消正式 `register_method`。方法泛型使用 `inflate(type, nameOrSignature, ...typeArgs)` 或 GTAP，不继续以 `make_generic_method(closure, ...)` 作为目标 API。
-- params 支持尾部展开，并按 ZLua 的默认参数与 params 惩罚规则竞争。
-- 公共 typeArg 接受类型对象、完整 CLR 类型名和 `System.Type`；GTAP 前缀只接受 `System.Type` wrapper。
-- 保持声明门面与实际对象身份分离；`ActualTypeUserData` 仅作为返回值策略。
-- XML 仅对 AOT 程序集有效，禁止热更新、运行时注册及 Reload；热更新程序集使用 Attribute。
+## 4. 调试验收限制
 
-## 5. JavaScript 差异的明确裁决
+Windows Inspector 协议与 Domain Reload 已验证。macOS arm64 的 Inspector 协议和资源清理已验证，但 Unity 2022.3.56f1c1 / macOS 26.0 在 Domain Reload 后存在退出超时问题，尚未解决。macOS x64 Editor 插件仅完成编译验证。
 
-| 项 | 目标契约 |
+调试功能通过 CDP 协议测试，VS Code 客户端界面未作自动化验证。
+
+## 5. 跟随 ZLua 的规则
+
+短名冻结、全签名受限懒解析、params 竞争、公共 typeArg、声明门面、ByVal/ByObj、Opaque 作用域、扩展配置和 AOT 构建设计保持一致。XML **仅 AOT 有效**，没有热更新、运行时注册或 Reload；热更新程序集依赖 Attribute。
+
+## 6. JS 必要差异
+
+| 项 | 当前裁决 |
 |---|---|
-| null / undefined | 显式空值与缺失分开 |
-| 实例方法 | 使用 JS this；提取后通过 `.call(receiver, ...)` |
-| out | JS→CLR 不占输入；返回 `[returnValue, out1, ...]`，void 时为 `[out1, ...]` |
-| Int64 / UInt64 | **默认 number**；允许 IEEE-754 精度损失，不能假装完整 64 位无损 |
-| 显式 BigInt | 新增 `JsMarshalType.BigInt`，仅显式标注的 Int64/UInt64 槽位使用 bigint |
-| table / bytes | JS 对象、Array、Uint8Array 分别定义规则；不把原始字节当 UTF-8 字符串 |
-| 协程 / Promise | 不作机械等价；Opaque 借用不能跨异步边界 |
-| ESM / 宿主 | Native 用模块适配器；HostJs 构建打包并预加载 |
-| GC / Reset | V8 与宿主 GC 接口不同，CLR 可见生命周期契约相同 |
+| 空值 | null 与 undefined 分开 |
+| 实例方法 | JS this；提取后 `.call(receiver, ...)` |
+| out | 不占 JS 输入；结果 `[ret, out1, ...]`，void 为 `[out1, ...]` |
+| ref | 保留输入；临时重新绑定不改 JS 局部变量、不进入 out 元组 |
+| Int64/UInt64 | 默认 number；具体槽显式 BigInt 才是 bigint |
+| Bytes | byte[] ↔ 复制 Uint8Array，不是二进制 string |
+| 异步 | Promise 不等同 Lua 协程；Opaque 不跨 await |
+| 模块 | 原生 V8 模块；HostJs 静态工厂预加载，不运行时 eval |
+| GC | 各引擎不同机制，同一根、generation 和 Reset 规则 |
 
-以上两条用户裁决覆盖先前方案或 P0 台账中“默认 BigInt”和“运行时 XML 注册”的提议。不能据旧台账恢复相反设计。
+## 7. 平台与测试
 
-## 6. 测试与文档维护
-
-每条规则应有 CLR fixture、语言表达与归一化期望。选中重载、异常分类、值/引用写回及门面行为必须跨 Mono/Il2Cpp 和 V8/HostJs 比较；引擎错误栈全文不要求一致。平台缺失能力单独列出，不能跳过应支持的 CLR 互操作。
-
-历史文档中 QuickJS 专属类型只允许出现在过渡适配器说明，不能成为目标 CLR 内核契约。目标支持矩阵、构建脚本存在、源码编译成功和真实平台运行通过须分别登记。
+支持的平台、已验证环境和已知限制见[项目状态](../getting-started/project-status.md)与[测试说明](../community/testing.md)。开发者应在自己的目标设备、Unity 版本和构建配置下验证适用功能。

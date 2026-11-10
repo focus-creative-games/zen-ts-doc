@@ -1,49 +1,32 @@
 ---
 sidebar_position: 3
-title: Compatibility
-description: Unity versions, runtimes, and supported platforms.
+title: "Compatibility and platforms"
 ---
 
-# Compatibility
+# Compatibility and platforms
 
-## Unity / Tuanjie
+## Engine versions
 
-| Version | Status |
-|---------|--------|
-| Unity **2021.3.x** | ✅ Supported |
-| Unity **2022.3.x** | ✅ Supported |
-| Unity **6000.0.x** | ✅ Supported |
-| Unity **6000.3.x** | ✅ Supported |
-| Unity **6000.5.x** | ✅ Supported |
-| **Tuanjie Engine 1.x.y** | ✅ Supported |
+ZenTS supports **Unity 2022.3.x LTS and later LTS releases**, and **Tuanjie based on Unity 2022.3.x LTS**. Unity 2021.3 and non-LTS releases are outside the support policy. A patch file does not establish validation for every matching configuration; installation must select a compatible patch and the build must succeed.
 
-libil2cpp patch resolution: see [Multi-version](/docs/spec/11-MULTI-VERSION/).
+## Backends and validation
 
-## Script VM and runtimes
+| Environment | Backend | Integration and validation |
+|---|---|---|
+| Windows x64 Editor | Mono + V8 | Full regression and Inspector validation |
+| macOS arm64 Editor | Mono + V8 | Full regression and Inspector protocol; see the shutdown limitation |
+| macOS x64 Editor | Mono + V8 | Plugin compiled; Intel Editor not run |
+| Win64 Player | IL2CPP + V8 | Full regression |
+| macOS arm64/x64 Player | IL2CPP + V8 | Runtime validated; x64 ran under Rosetta |
+| Android arm64/x64 | IL2CPP + V8 | MuMu emulator validated; arm64 uses emulator translation |
+| iOS x64 Simulator | IL2CPP + JITless V8 | Simulator validated |
+| iOS arm64 device | IL2CPP + JITless V8 | Unsigned compilation only; no device runtime validation |
+| WebGL | IL2CPP/WASM + HostJs | Chrome runtime, GC, Reset, and constrained-host validation |
+| WeChat Mini Games | IL2CPP/WASM + HostJs | Official SDK conversion and developer-tools runtime; no phone validation |
+| Tuanjie | V8 Editor; static V8 native Player; HostJs WebGL/WeChat | Supported; WeChat target recognized as `WeixinMiniGame` |
 
-| Category | Status |
-|----------|--------|
-| **Script VM** | Editor and non-HostJs players: **QuickJS** (pin under package `ZenTS~/`). **WebGL Player: the host JS engine**. No PUC-Rio / LuaJIT switch |
-| **Editor** | **Mono** (Expression Emit; **JS-visible semantics match** Il2Cpp) |
-| **Player** | **Il2Cpp** (authoritative; `zents-runtime` C++ bridges) |
+Native platforms follow the V8 route. Other platforms without a suitable V8 SDK are not automatically supported. HostJs covers explicitly integrated targets; a MiniGame-like name does not imply support for Douyin, HarmonyOS, automotive, or other platforms.
 
-**Il2Cpp builds:** before shipping, run **`ZenTS/Generate/All`** (C++ stubs, **not** C# Wrap). See [Build](/docs/guides/build/), [Editor vs Player](/docs/guides/editor-vs-player/).
+HostJs currently requires `Proxy`, `BigInt`, `WeakRef`, and `FinalizationRegistry`. Missing weak-reference capabilities cause an explicit failure. The bridge uses a single-threaded synchronous configuration; Workers are not arbitrary synchronous CLR calling threads.
 
-## Target platforms
-
-| Category | Scope |
-|----------|-------|
-| **Editor (dev)** | **Windows x64**, **macOS** (Apple Silicon / Intel) |
-| **Player (Il2Cpp)** | Designed for **all targets Unity / Tuanjie Il2Cpp normally supports**, including but not limited to **Win64**, **Android**, **iOS**, **WebGL**, **WeChat Mini Games**, **HarmonyOS / automotive**, and other desktop / mobile / mini-game / vehicle Il2Cpp build targets |
-
-Non-HostJs targets link QuickJS into the player after Install. The **WebGL Player uses the host JS engine** and does not compile QuickJS into WASM. Details: [QuickJS build](/docs/spec/build/01-QUICKJS/) §5 and [HostJs](/docs/spec/build/06-HOSTJS/).
-
-| Target | Script engine |
-|--------|----------------|
-| Editor, and non-HostJs players such as Win64 / Android / iOS | QuickJS |
-| WebGL Player | Host JS (HostJs) |
-| Target name contains `MiniGame` / `Weixin` / `Douyin` / `TikTok` | Same as WebGL: QuickJS is not installed. Mini-game templates are out of scope |
-
-For other platform issues, please [file an Issue](https://github.com/focus-creative-games/zen-ts/issues).
-
-Semantic contracts live under [spec](/docs/category/spec/); project stage: [Project status](/docs/getting-started/project-status/).
+See [status](project-status.md) for versions and test scope, and [builds](../guides/build.md) for SDK identity requirements.

@@ -1,66 +1,64 @@
 ---
 sidebar_position: 6
-title: "HostJs"
+title: "HostJs, WebGL, and WeChat"
 ---
 
-# Build — HostJs
+# HostJs, WebGL, and WeChat
 
-> Script engine for the WebGL Player. The Editor and other Il2Cpp players stay on QuickJS. See [01-QUICKJS.md](./01-QUICKJS.md).
-> This page records only the accepted contract. Shim fixes that made WebGL match QuickJS are not listed as differences.
+## 1. Backend selection
 
----
+Use the platform VM with no V8/QuickJS in WASM. Reuse EngineApi and CLR plans/overloads/marshaling; specialize transport, modules, and startup.
 
-## 1. Switch
+Explicitly match WebGL or WeixinMiniGame, not any MiniGame-like name. Managed routes include UNITY_WEBGL, explicit WeChat macros, and ZENTS_HOST_JS. Editor always uses native V8. Tuanjie and its WeChat target use the shared HostJs core and corresponding build flow.
 
-`QuickJsCompatible.h` selects the header with the compiler predefined `__EMSCRIPTEN__`. Emscripten includes `hostjs/quickjs.h`. Other targets include `../quickjs/quickjs.h`.
+## 2. Synchronous binary protocol
 
-Install follows the active Build Target. WebGL, and targets whose names contain `MiniGame`, `Weixin`, `Douyin`, or `TikTok`, do not copy `ZenTS~/quickjs-il2cpp` into `libil2cpp/quickjs`. Other players still copy it. Switching target requires Install again. `ZenTS/Dev/MarkedAsInstalled` only refreshes the install stamp.
+JS/WASM calls use owned 16-byte values and HostOperation binary imports, not the retired JSON/ccall prototype. Nested calls have independent receiver, argument, result, and error frames.
 
-`JSValue` in the shim is 16 bytes (NaN-boxing off). The C++ MethodBridge is not rewritten for the engine switch.
+| Value | Transport rule |
+|---|---|
+| number/boolean/null/undefined | Separate tags |
+| Default long/ulong | number, with defined precision loss |
+| Explicit BigInt long/ulong | Exact payload, never first through double |
+| Strings | UTF-8 pointer/length, preserving NUL and non-BMP |
+| Objects/functions | Owner, handle, generation |
+| Bytes | Length and explicit copy ownership |
+| out/UnpackedValues | Preserve outer tuple/nested array structure |
 
-The first promised Unity version is **2022.3.62f3** WebGL. Mini-game templates, subpackages, and a prebuilt `game.js` are out of scope.
+Refresh TypedArray heap views after growth. UTF-8 covers BOM, replacement for malformed sequences, NUL, and missing TextDecoder. Do not reuse invalid views or one global scratch frame.
 
----
+## 3. GC and Reset
 
-## 2. Call frame
+Require Proxy, BigInt, WeakRef, and FinalizationRegistry. Missing weak-reference capabilities fail; no permanent strong table pretends to be weak.
 
-One JS-to-C# method call crosses JS↔WASM once. The wrapper writes arguments into `ZentsXferSlot`, then calls `zents_host_enter_cfunc(funcId, argc)`.
+Wrappers root CLR objects; delegates retain JS functions. FinalizationRegistry enqueues and FramePump releases roots. Collection is not immediate. Tokens/generations prevent old references reaching reused slots.
 
-| Value | What the frame stores |
-|-------|------------------------|
-| number, boolean | tag and immediate |
-| string | UTF-8 and length written in that same wrapper, before entering C |
-| object | handle |
+Reset rebuilds ZenTS instances/caches/handles, not the platform VM. Unsubscribe business-owned wx events/timers and strong cycles explicitly.
 
-`JS_Is*`, `JS_ToInt32`, and `JS_ToFloat64` read the local tag and do not cross again. Slot capacity is 64. Beyond that, JS throws `zents: too many arguments` and does not enter C.
+## 4. Static modules
 
----
+esbuild parses ESM, synthesizes csharp:, and emits CommonJS factory registries. Both facade and business code avoid runtime eval/new Function/with. Preload bundles/subpackages before synchronous entry.
 
-## 3. Module subset
+Reject dynamic import/import.meta; top-level await fails CommonJS compilation. Do not fake fulfilled Promises. Other import/export/cycle/live-binding support follows actual builder/tests.
 
-Module loading stays synchronous. The synthetic promise is already fulfilled when `JS_LoadModule` returns.
+Precompile loader/Reset source variants. UTF-16-hex source keys preserve identity through WeChat converter rewriting. Source mismatch fails; never fall back only by module name.
 
-**Form A (WebGL publish).** Preprocess wraps ESM as `zents.define(name, deps, factory)`. The Editor still reads unwrapped ESM from `TsProject/out`. A wrap failure fails the WebGL build. A source that contains `zents-define: skip` is copied unchanged so the runtime can still reject `import()`.
+## 5. Jobs and threads
 
-**Form B (runtime subset).** Named import/export, side-effect import, `export function` / `const` / `class`, `export { a as b }`, and `export { x as y } from` are accepted. `import()`, `import *`, default import, `export default`, and top-level `await` throw `zents: unsupported module syntax` and include the file name.
+Use platform Promise/microtasks with equivalent observable safe-boundary behavior, not a competing queue or automatic await. Old callbacks cannot enter a new generation; Opaque cannot cross await.
 
-`csharp:` is not passed to the business loader. The specifier splits at the first `/` into an assembly name and a type path.
+Current builds are single-threaded. Workers are not synchronous CLR reentry hosts. wx APIs are usable directly on platform, not automatically in Editor V8.
 
----
+## 6. WeChat integration
 
-## 4. Must match
+The official converter SDK is optional. ZenTS/Build WeChat Mini Game or ZenTS.Editor.WeChatBuild.RunBatch invokes WXConvertCore.DoExport(true) through reflection.
 
-Observable results of the existing interop cases must match the QuickJS Editor backend: `GetFunction`, unregistered members, `null` / `undefined`, primitive and bigint rejection, struct / Table / Nullable, arrays, byref / Opaque expiry outside the call, `csharp:`, `Reset`, and `zents.*` generics and array factories.
+Normal builds preserve subpackage/CDN/development settings and restore temporary template/graphics/exception/thread/codegen changes. HostJs requires single-threaded/full-exception configuration. OptimizeSize fully shared generic delegate ABI is supported; GTAP checks invoker availability, not methodPointer alone.
 
----
+ZENTS_WECHAT_APPID, ZENTS_WECHAT_OUTPUT, and ZENTS_NODE configure builds. ZENTS_WECHAT_ACCEPTANCE=1 is validation-only. The validator copies output into Library and injects run-scoped temporary logging, never into normal release output; network failure cannot count as success.
 
-## 5. Allowed differences
+## 7. Validation
 
-Only the items in design §13.2. P4 did not skip any case.
+Chrome/WeChat tools pass 434 named cases with one managed-worker skip, Smoke 10/10, TS 3/3, plus GC/Reset/Unicode/NUL/throw-undefined and shared-generic checks.
 
-| Item | Contract |
-|------|----------|
-| Language engine | The Editor baseline remains QuickJS `2026-06-04`. The browser may run syntax QuickJS rejects. That script failing in the Editor matches the baseline |
-| RegExp, Date, sort, locale | Interop tests do not depend on them. The P4 suite had no such cases |
-| Error stack text | The message stays diagnosable and keeps the `zents:` prefix. Stack format may differ |
-| Microtasks | The shim queue is drained at end of frame. Async modules are not in v1 |
+WeChat validation uses Unity 2022.3.62f3, SDK 202610200817, tools 2.01.2510260, base library 3.17.6; converter commit 915d4bf4f60ef0cd1c29316a8d67257185d609a7. Tuanjie WeChat is also supported. Phone/upload/release and other Mini Game platforms are separate scopes. See [status](../03-ALIGNMENT.md).

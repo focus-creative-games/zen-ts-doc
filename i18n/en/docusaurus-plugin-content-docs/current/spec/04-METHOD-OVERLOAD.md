@@ -1,445 +1,82 @@
 ---
 sidebar_position: 4
-title: "方法重载"
----
-:::note 文档站副本
-本页为语义契约的发布副本；请在上游 `ZenTSTest/Docs/spec` 修改后执行 `npm run sync-spec`。（源：`04-METHOD-OVERLOAD.md`）
-:::
-
-
-# 04 — 方法重载
-
-> C# 方法重载在 JavaScript 侧的解析与调用策略。适用于 **Il2Cpp（Player）** 与 **Mono（Editor）**。
-> 继承与 Bind 规则见 [02-TYPE-SYSTEM.md](./02-TYPE-SYSTEM.md) §5；`zents` API 见 [05-LIB.md](./05-LIB.md)。
-
+title: "Method overloads"
 ---
 
-## 1. 问题与目标
+# Method overloads
 
-C# 允许同名方法因参数类型/个数不同而重载；JavaScript 无静态类型，无法仅凭 `obj.Run(x)` 在编译期选定重载。
+## 1. Binding domains
 
-| 目标 | 说明 |
-|------|------|
-| 易用 | `demo.Run(10)` 在常见场景下应能工作 |
-| 精确 | 同名冲突时 Bind 期自动挂 **全签名键**；亦可 `[JsAlias]` / `register_method` 挂短名 |
-| 性能 | 热路径优先单候选 direct（全签名键、别名、或本地缓存 closure），避免反复 dispatch |
-| 一致 | Mono 与 Il2Cpp 选中同一重载，错误信息一致（`zents:` 前缀） |
+One final-name candidate yields a direct closure; multiple candidates yield dispatch. Short names freeze. Full-signature keys resolve on a miss and cache, even for one candidate. Static, ByObj instance, and ByVal instance domains are independent.
 
-**方法 `this`：** `obj.Method(args)` 作为 **方法调用** 时自动传入 CLR `this`；**提取** 的函数 **不** 自动绑定（[00-OVERVIEW.md](./00-OVERVIEW.md) §6）。
+Real instance and configured extension methods compete together; no extra instance-first rule exists. Final names follow attribute Alias, AOT XML Alias, then CLR name. Aliases replace, not duplicate, short names. Constructors use only current-type declarations.
 
----
+## 2. Applicability and slots
 
-## 2. 三层机制（优先级）
+Check applicability before better-member comparison. Never select by metadata enumeration order or a total score that hides per-argument tradeoffs.
 
-```text
-flowchart LR
-    A["访问键 finalName"] --> B{该键下候选数}
-    B -->|1| C["direct function"]
-    B -->|≥ 2| E["dispatch function"]
-    E --> F["按 §3.6 选 overload"]
-    S["全签名键 Name(Types…)"] --> C
-    G["[JsAlias] / 本地缓存"] --> C
-    H["register_method 新名"] --> C
+| Parameter | JS input |
+|---|---|
+| Ordinary/ref/in | One normally; Members count for UnpackedValues |
+| out | Zero; result tuple afterward |
+| Optional tail | Missing/undefined selects cached CLR default |
+| params | Zero or more remaining elements, or one assignable CLR array wrapper |
+
+Missing required/excess arguments fail. Direct, dispatch, constructors, and ordinary delegate Invoke share slot calculation. Undefined retains its position. Null matches legal references/Nullable; see [defaults](marshal/01-OVERVIEW.md).
+
+params omission produces empty T[]. JS Array/TypedArray is not the entire params array; spread explicitly, unless T itself accepts it as one element. Null is an element, not a null array: params string[] may accept one null, params int[] does not. Delegate/GetFunction bridge expansion is unsupported.
+
+## 3. Conversions and better member
+
+Default long/ulong use number, not bigint. Explicit BigInt slots accept bigint only with complete range checks. No cross-conversion silently mixes these channels. Boolean/string/wrapper rules are strict; conversion classification does not allocate boxes before selection.
+
+Identity is better than ImplicitNumeric, ImplicitEnum, NullLiteral, ImplicitReference, and ImplicitBoxing according to the common comparison rules. A candidate wins conversions only if at least one argument is better and none worse.
+
+For equal conversions, compare in order:
+
+1. Fewer optionalUsed.
+2. paramsExpanded = 0, without expansion.
+3. paramsKind = 0, non-params.
+
+Remaining ties are ambiguous. Diagnostics may sort candidates but must not resolve true ambiguity.
+
+## 4. Lazy full signatures
+
+Keys are `CLRMethodName(Type.FullName,...)`, without return type. Extension signatures omit self; byref uses `&`; open generic parameter names remain in open signatures. Alias does not rename the CLR key.
+
+On an ordinary miss containing `(`, search public methods in the current/base chain in the correct static/instance domain, excluding constructors, cctors, and property accessors. Create/cache direct or GTAP closures on the triggering side. This is restricted signature lookup, not arbitrary miss-time reflection promotion.
+
+```javascript
+const direct = obj['Run(System.Int32)'];
+direct.call(obj, 5);
+obj['Run(System.Int32)'](5);
 ```
 
-1. **按最终名字分组**（§3、§5）：每个方法以其 **最终 JS 名**（C# 默认名、`[JsAlias]` / XML 别名）进入分组；**同名允许多候选**（仅 Bind 期）。
-2. **单候选 → direct；多候选 → dispatch**（§3.6）。
-3. **同名多候选时额外挂全签名键**（§3.7）：每个冲突重载再注册 **direct** 键 `MethodName(ParamTypeFullNames…)`（**不含**返回类型）。
-4. **运行时**（§6）：`register_method` 仅允许挂到 **尚不存在** 的新最终名（§6.1）。
+## 5. GTAP and inflate
 
----
+An open generic candidate accepts N System.Type wrappers before ordinary inputs, where N is method generic arity. Type objects, strings, and zents.types constants are not valid GTAP prefixes; convert type objects with zents.typeof.
 
-## 3. 默认名与 dispatch
+A valid prefix plus applicable closed signature takes the generic path; otherwise consider ordinary nongeneric candidates. Constraints and missing AOT code fail explicitly. GTAP/inflate share an intern key including closedMethod/isStatic/isByVal.
 
-### 3.1 注册规则（按最终名字分组）
+signature(...typeArgs) builds only `(System.Int32,...)`; prepend the CLR method name for a key. Signatures still include out CLR parameter types despite zero JS input slots.
 
-在同一类型、同一 `is_static` 域、同一实例形态（ByVal / ByObj）内：
+## 6. Alias, this, and configuration
 
-| 该最终名下的候选数 | 三表键绑定 |
-|--------------------|------------|
-| 1 | **direct method function** |
-| ≥ 2 | **dispatch function**（§3.6 选具体重载） |
+Alias XML is Settings.jsAliasXmlPaths, root JsAlias, separate from other XML. Same-slot duplicates fail; different methods may share aliases. XML applies only at AOT session/build time, not registration/Reload.
 
-来源：多个 C# 同名重载；`[JsAlias]` 撞名；**C# extension**（[13-EXTENSION-METHODS.md](./13-EXTENSION-METHODS.md)）与实例方法 **同一最终名** → **合并竞争**（无「实例优先」）。
+Instance/extension calls use this; extracted closures do not bind receivers. Static closures need no instance. register_method and make_generic_method are removed; use Alias, signatures, and inflate.
 
-> **`zents.register_method` 除外：** 运行时 **禁止** 使用已存在的最终名（§6.1）。
-
-静态与实例 **分表**（STO `staticMap` vs IEO `byvalInstanceMap` / `byobjInstanceMap`）。
-
-### 3.2 重载候选顺序
-
-分派时在 **applicable** 重载中按 **§3.6 better function member** 选优；**不得**因 metadata 顺序跳过更优重载。
-
-同分 tie-break：
-
-1. Codegen 声明顺序
-2. 反射兜底：完整签名字典序
-
-### 3.3 参数匹配规则
-
-在 **JS 实参个数**可接受的前提下，按实参索引逐 **CLR 形参**判断（`UnpackedValues` 占多槽，见 [marshal/02-MARSHAL-AS.md](./marshal/02-MARSHAL-AS.md) §5.5）。与 marshal `TryPop` 一致，包括但不限于：
-
-| JS 实参 | C# 形参 | 规则 |
-|---------|---------|------|
-| `number`（整数） | `int` / `long` 等 | 范围内；**禁止 bigint** |
-| `number`（非整数） | `int` | **不匹配** |
-| `number` | `float` / `double` | 允许 |
-| `string` | `string` | 允许 |
-| **`null`** | 引用 / `Nullable<T>` | 允许 |
-| **`undefined`** | 必选形参 | **不匹配**（或 throw，见 overload 失败路径） |
-| **`undefined`** | 可选（`HasDefault`） | 使用默认值 |
-| **`undefined`** | `Nullable<T>` | 无值 |
-| exotic | 引用类型 | 运行时类型可赋值 |
-| 基元 / `string` | **`object`** | `ImplicitBoxing` / `ImplicitReference` |
-| ByVal 值类型 | **`object` / interface** | 可装箱时 `ImplicitBoxing` |
-| 基元 | **class / interface（非 object）** | **不匹配** |
-| `Array` / exotic + `params T[]` | `params` | **单实参槽**；**不**多实参隐式收集 |
-| N 连续实参 | `UnpackedValues` | 占用 **N** 槽 |
-
-**可选 / 默认参数：**
-
-| 规则 | 说明 |
-|------|------|
-| 适用范围 | 方法与构造；**尾部连续** `HasDefault` 段 |
-| 实参个数 | `minJsArity ≤ argCount ≤ jsArity` |
-| 填充 | Bind 期物化默认值；invoke 写入未提供形参 |
-| 选优 | 转换 kind 相同时 **`optionalUsed` 更小** 更优 |
+## 7. Examples and consistency
 
 ```csharp
-void Foo(int x, int y = 5);
-void G(int x);
-void G(int x, int y = 5);
-```
-
-| JS | 结果 |
-|----|------|
-| `Foo(1)` | OK；`y` 默认 |
-| `Foo()` | 不适用 |
-| `G(1)` | 选 `G(int)` |
-| `G(1, 4)` | 选 `G(int,int)` |
-
-**构造函数：** `new Type(...)` 使用相同分派（含默认参数）。
-
-### 3.4 性能说明
-
-dispatch 为低效路径。热点应使用：
-
-- **全签名键**（§3.7，已是 direct）；
-- **单候选** `[JsAlias]` 名；
-- `register_method` 短名；
-- 本地缓存：`const run = demo['Run(System.Int32)']`。
-
-### 3.5 失败错误
-
-无匹配 → **`throw new Error('zents: no overload for Demo.Run matching …; candidates: …')`**。
-
-### 3.6 隐式转换分类与最优重载
-
-#### 3.6.1 设计原则
-
-1. **`ConversionKind` 只描述 C# 隐式转换类别**。
-2. **选优与 C# better function member 一致**。
-3. **Mono / Il2Cpp** 须选中同一重载。
-
-#### 3.6.2 `ConversionKind`
-
-| Kind | 含义 |
-|------|------|
-| `Identity` | 类型相同 |
-| `ImplicitNumeric` | 隐式数值拓宽 |
-| `ImplicitEnum` | integer `number` → enum |
-| `NullLiteral` | **`null`** → 引用 / Nullable |
-| `ImplicitReference` | 子类→父类；`string`→`object` |
-| `ImplicitBoxing` | 值类型→`object` / interface |
-| `None` | 不匹配 |
-
-优劣链：
-
-`Identity` ≻ `ImplicitNumeric` ≻ `ImplicitEnum` ≻ `NullLiteral` ≻ `ImplicitReference` ≻ `ImplicitBoxing`
-
-**`undefined` 对必选形参** → `None`（除非 optional 规则接管）。
-
-#### 3.6.3 Better function member
-
-1. 逐形参 `GetConversionKind`；任一 `None` → 不适用。
-2. M 优于 N：存在 i 使 M 更优，且无 j 使 N 更优。
-3. 仍相同：比 `optionalUsed`。
-4. 仍无 strictly better → Ambiguous 或声明顺序 tie-break。
-
-#### 3.6.4 invoke 期隐式 Box
-
-仅当 Kind 为 `ImplicitBoxing` 时，在 **已选定重载** 的 `TryPop` 内 Box。**禁止**在 `GetConversionKind` 循环内 Box。
-
-### 3.7 同名冲突：全签名键（Bind 期自动）
-
-候选数 ≥ 2 时，除 dispatch 外，为 **每个** 候选再注册 direct 键：
-
-```text
-<MethodName>(<Type0.FullName>,<Type1.FullName>,…)
-```
-
-| 规则 | 说明 |
-|------|------|
-| 何时 | **仅** 该最终名下 ≥ 2 候选 |
-| 方法名 | C# `MethodInfo.Name`（非 `[JsAlias]` 短名） |
-| 参数 | `Type.FullName` 逗号分隔；**不含**返回类型 |
-| 绑定 | 该候选 **direct function** |
-
-**示例：** `Run(int)` 与 `Run(string)`：
-
-| 键 | 绑定 |
-|----|------|
-| `Run` | dispatch |
-| `Run(System.Int32)` | direct → `Run(int)` |
-| `Run(System.String)` | direct → `Run(string)` |
-
-```javascript
-const demo = new CSharp.AC.Demo();
-
-demo.Run(5);                              // dispatch
-demo.Run("hi");                           // dispatch
-
-demo['Run(System.Int32)'](5);             // direct；方法调用绑定 this
-demo['Run(System.String)']("hi");
-
-const fn = demo['Run(System.Int32)'];
-fn(5);                                    // ❌ 不绑定 this
-```
-
-短名冒号式体验：`register_method` 或 `[JsAlias]` → `demo.run_i32(5)`。
-
----
-
-## 4. 签名字符串规范
-
-### 4.1 `zents.signature`
-
-```javascript
-const sig = zents.signature(zents.types.int32);
-// "(System.Int32)"
-
-const sig0 = zents.signature();
-// "()"
-```
-
-- 参数为 typeArg（类型对象、`zents.types.*`、mscorlib 字符串）
-- **不包含** 方法名
-- 格式：括号 + **`Type.FullName`** 列表
-
-Native：`__zents_create_signature`（`ZenTSLib`）。`zentslib.js` 封装为 `zents.signature(...)`。
-
-### 4.2 全签名键 = 方法名 + §4.1
-
-```text
-"Run" + "(System.Int32)"  →  "Run(System.Int32)"
-```
-
-**禁止** 仅用 `"(System.Int32)"` 作键。
-
----
-
-## 5. 别名机制（`[JsAlias]`）
-
-### 5.1 模型：换名 + 按最终名分组
-
-`[JsAlias]` / XML 指定 **唯一最终 JS 名**，**替换** C# 默认名（**不**双挂）。
-
-| 来源 | 条件 |
-|------|------|
-| `[JsAlias("…")]` | Attribute 非空 |
-| XML `Method/@alias` | 无 Attribute 时 |
-| `MethodInfo.Name` | 以上皆无 |
-
-```
-按 finalName 聚合 → 1 → direct；≥ 2 → dispatch
-```
-
-- **允许**别名与默认名 / 其它别名 **重复**（撞名 → overload 组）；
-- **不允许**「默认名 + 别名」双挂。
-
-### 5.2 示例
-
-```csharp
-public class Demo
-{
-    public void Run(int value) { }
-    public void Run(string value) { }
-
-    [JsAlias("Foo")]
-    public void Bar(string s) { }   // 不再挂 "Bar"
-
-    [JsAlias("run_i32")]
-    public void Run(long value) { } // 不再挂默认 "Run" 对此重载
-}
+public static int Sum(params int[] values) { return 0; }
+public static bool TryGet(int key, out string value) { value = null; return false; }
 ```
 
 ```javascript
-demo.Run(10);         // dispatch（int/string）
-demo.Foo("hi");       // dispatch（Foo(int)+Bar(string)）
-demo.run_i32(10);     // direct → Run(long)
+Demo.Sum(1, 2, 3);
+Demo.Sum(...[1, 2, 3]);
+const [ok, value] = Demo.TryGet(7);
 ```
 
-### 5.3 C# Attribute
-
-```csharp
-[JsAlias("run_i32")]
-public void Run(int value) { ... }
-```
-
-定义于 `ZenTS.Common`。Attribute **优先于** XML。
-
-### 5.4 XML 配置（独立于 MarshalAs）
-
-| 约束 | 说明 |
-|------|------|
-| **独立路径** | Settings **`jsAliasXmlPaths`**（与 `marshalAsXmlPaths` **分开**） |
-| **独立根元素** | **`JsAlias`** |
-| **分文件** | 不得写入 `ZenTSMarshalAs` |
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<JsAlias version="1">
-  <Assembly name="Assembly-CSharp">
-    <Type fullName="Demo">
-      <Method name="Run" signature="(System.Int32)" alias="run_i32"/>
-    </Type>
-  </Assembly>
-</JsAlias>
-```
-
-| 属性 | 含义 |
-|------|------|
-| `Method/@name` | CLR 方法名 |
-| `Method/@signature` | 与 MarshalAs XML 相同约定 |
-| `Method/@alias` | **必填**；最终 JS 名 |
-
-Mono 运行时加载；Il2Cpp **Generate** 静态表；Player **不**读 XML。
-
-同一 `(assembly, type, methodName, signature)` 多条 alias → **失败**。不同方法撞同一最终名 **允许**。
-
-### 5.5 静态 / 实例
-
-分组 **不得**跨静/实例或 ByVal/ByObj。
-
-### 5.6 与 field / property 同名
-
-`__index` 仍 **methodTable 优先**（[metatable/02-INDEX.md](./metatable/02-INDEX.md)）。
-
----
-
-## 6. 运行时 API
-
-优先顺序：
-
-1. **全签名键**（§3.7）
-2. Bind 期 **`[JsAlias]`**
-3. **`register_method`** 挂新短名
-
-### 6.1 `zents.register_method`
-
-```javascript
-zents.register_method(aliasName, methodOrClosure);
-```
-
-**用途：** 把 **direct** closure 挂到 **尚不存在** 的短名；之后 **`obj.aliasName(args)`** 方法调用绑定 `this`。
-
-```javascript
-const demo = new CSharp.AC.Demo();
-
-demo['Run(System.Int32)'](5);           // 全签名 direct
-
-const run_i32 = demo['Run(System.Int32)'];
-zents.register_method("run_i32", run_i32);
-
-demo.run_i32(5);                         // ✅ 方法调用 + this
-```
-
-| 参数 | 说明 |
-|------|------|
-| `aliasName` | 非空；**新**最终名 |
-| `methodOrClosure` | **direct method function**（`IsDirectMethodClosure`） |
-
-**写入目标（由 closure 内嵌 `TypeBinding` 推断）：**
-
-| closure 域 | 写入 |
-|------------|------|
-| 静态 | `staticMap` |
-| 实例 ByVal | `byvalInstanceMap` |
-| 实例 ByObj | `byobjInstanceMap` |
-
-| 情况 | 行为 |
-|------|------|
-| `aliasName` **不存在** | 写入 direct |
-| `aliasName` **已存在** | **`throw Error('zents: …')`** |
-| 传入 **dispatch** | **throw** |
-
-与 `[JsAlias]`：Bind 期允许撞名；`register_method` **仅空位挂名**。
-
-Native：`__zents_register_method`。
-
----
-
-## 7. 调用约定摘要
-
-| 场景 | 写法 |
-|------|------|
-| 默认分派 | `demo.Run(10)` |
-| 全签名键 | `demo['Run(System.Int32)'](10)` |
-| `[JsAlias]` | `demo.run_i32(20)` |
-| `register_method` 后 | `demo.run_cached(20)` |
-| 静态 | `Demo.Add(3, 5)` |
-| 提取函数 | `const f = demo.Run; f(10)` ❌ |
-
----
-
-## 8. Mono / Il2Cpp 一致性
-
-分组、全签名键、别名重复、签名格式、dispatch、选中重载、`register_method` 两参数与占用名拒绝、错误文案 — **须一致**。
-
----
-
-## 9. 完整示例
-
-```csharp
-public class Demo
-{
-    public void Run(int value) { }
-    [JsAlias("run_str")]
-    public void Run(string value) { }
-    public void Foo(int x) { }
-    [JsAlias("Foo")]
-    public void Bar(string s) { }
-    public static int Add(int a, int b) => a + b;
-    [JsAlias("add_i32")]
-    public static int Add(int x) => x;
-}
-```
-
-```javascript
-const demo = new CSharp.AC.Demo();
-
-demo.Run(10);
-demo.Run("ab");
-demo['Run(System.Int32)'](10);
-
-demo.Foo("hi");
-
-const run_i32 = demo['Run(System.Int32)'];
-zents.register_method("run_cached", run_i32);
-demo.run_cached(20);
-
-console.assert(CSharp.AC.Demo.add_i32(7) === 7);
-```
-
----
-
-## 10. 实现落点（参考）
-
-| 模块 | 职责 |
-|------|------|
-| `ValueMarshaling` | `ConversionKind`、`TryPop` |
-| `FindMatchingMethod` | applicable + better member |
-| `MetaBinding` | dispatch、direct、`register_method` |
-| `ZenTSLib` | `__zents_create_signature`、`__zents_register_method` |
-
-C# Extension 见 [13-EXTENSION-METHODS.md](./13-EXTENSION-METHODS.md)。
+Slots/defaults/penalties/constraints/views/errors must match Mono/IL2CPP and V8/HostJs, regardless of Emit, invoker, or specialized bridge implementation. See [status](03-ALIGNMENT.md).

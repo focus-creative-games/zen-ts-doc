@@ -3,14 +3,14 @@ sidebar_position: 5
 title: "原生模块与平台能力"
 ---
 
-> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
+> 本页定义当前互操作契约；平台验收范围与已知限制见[对齐状态](/docs/spec/03-ALIGNMENT/)。
 
 # 构建 — 原生模块与平台能力
 
 ## 1. 两类入口
 
 - CLR 能力优先通过普通 C# 互操作暴露，使用同一类型与 Marshal 契约。
-- 确需原生 JS 扩展时通过所选 backend 的模块注册接口实现；它不是默认业务脚本加载器。
+- 确需原生 JS 扩展时需在所选 backend 中专门接入；这是适配器扩展边界，不是已交付的通用动态插件注册 API，也不是业务脚本加载器。
 
 不把 QuickJS 的 JSModuleDef/js_init_module 签名作为跨引擎 API，也不承诺加载 Node.js addon 或提供 Node.js 标准库。内嵌 V8 不等于内嵌 Node。
 

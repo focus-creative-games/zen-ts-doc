@@ -1,89 +1,35 @@
 ---
 sidebar_position: 17
-title: zents 标准库
-description: "日常最常用的 zents API；其余见规范。"
+title: "zents 常用工具"
 ---
 
-# zents 标准库
+# zents 常用工具
 
-| 层 | 职责 |
-|----|------|
-| **`CSharp` / `csharp:`** | 程序集 / 类型 / 成员 / 构造 |
-| **`zents`** | 类型构造辅助、opaque、数组、delegate、重载短名 |
-| **实例 exotic** | 成员经三表 / IEO，**不经** `zents` |
+`zents` 是各引擎共用的脚本门面。内部 `__zents_*` hook、V8 handle 和 WASM token 不是业务 API。
 
-全文 API：[05-LIB](/docs/spec/05-LIB/)、TypeScript 声明见 [14-TYPESCRIPT](/docs/spec/14-TYPESCRIPT/)。本篇只列最常用。失败路径统一 **`throw Error('zents: …')`**，**不**返回 `undefined` 表示 miss。
-
-## 类型实参与查询
-
-| API | 用途 |
-|-----|------|
-| `zents.types.int32` 等 | 预置类型实参（见规范表） |
-| `zents.typeof(typeObject)` | ≡ C# `typeof`，返回 `System.Type` **ByObj exotic**（**不作** `make_*` 的 typeArg） |
-| `zents.get_type_from_name(name)` | 对标 `Type.GetType`；找不到 → throw |
-
-## 重载
-
-同名多候选时，Bind 已自动挂全签名键（如 `Run(System.Int32)`），一般 **不必** 先调库：
+## 类型和泛型
 
 ```javascript
-demo['Run(System.Int32)'](5);   // 方法调用绑定 this
+const Int32 = CSharp['mscorlib']['System.Int32'];
+const systemType = zents.typeof(Int32);
+const listType = CSharp['mscorlib']['System.Collections.Generic.List`1'];
+const IntList = zents.make_generic_type(listType, Int32);
 ```
 
-需要短名时再 `register_method`：
+`typeof` 返回 CLR System.Type wrapper；`get_type_from_name` 解析完整 CLR 名称。`inflate(owner, key, ...typeArgs)` 闭合方法泛型。
+
+## 数组
 
 ```javascript
-const run_i32 = demo['Run(System.Int32)'];
-zents.register_method("run_i32", run_i32);
-demo.run_i32(5);   // 注册后的好处：可读短名 + 方法调用 this
+const array = zents.new_szarray_by_element_type(zents.types.int32, 2);
+array.set(0, 5);
+const values = zents.to_array(array);
 ```
 
-`zents.signature(...)` 只生成参数括号部分（如 `"(System.Int32)"`），用于对照/拼接；**不能**单独当键。见 [方法重载](/docs/guides/overloads/)。
+`make_szarray_type` / `make_mdarray_type` 创建数组类型，`new_mdarray_by_spec` 接受各维下界和长度。`to_array` 与 `to_bytes` 都是复制工具，不改变默认 wrapper 规则。
 
-## 泛型与数组
+## 对象与调用
 
-```javascript
-const ListInt = zents.make_generic_type(
-  CSharp.mscorlib['System.Collections.Generic.List`1'],
-  zents.types.int32
-);
-const list = new ListInt();
+`box` / `unbox` 管理装箱值，`cast` 选择兼容 CLR 门面；`to_delegate(func, delegateType)` 创建指定 CLR 委托。Opaque 使用 `get_opaquevalue` / `set_opaquevalue` 访问，不能越过产生它的调用期；`to_user_data` 也不免除类型和生命周期检查。
 
-const arr = zents.new_szarray_by_element_type(zents.types.int32, 4);
-arr.set(0, 1);
-const view = zents.to_array(arr);
-const raw = zents.to_bytes(byteArr);  // blittable 元素
-```
-
-见 [泛型](/docs/guides/generics/)、[数组](/docs/guides/arrays/)。
-
-## Opaque / 装箱 / 门面
-
-| API | 用途 |
-|-----|------|
-| `get_opaquevalue` / `set_opaquevalue` | 同步链内读写 Opaque |
-| `to_user_data` | Opaque **拷贝** 为 ByVal struct exotic |
-| `box` / `unbox` | 值类型装箱 / 拆箱 |
-| `cast` | 引用类型 IEO 门面切换 |
-
-`ref` struct：传同型 `new Type(...)` ByVal exotic 即可写回。见 [ref/out/in](/docs/guides/ref-out-in/)。
-
-## Delegate
-
-```javascript
-const d = zents.to_delegate(fn, ActionIntType);  // 第二参须已闭合
-```
-
-形参已是具体 `Action`/`Func` 时通常 **不必** 调用。见 [委托与函数](/docs/guides/functions/)。
-
-## 其它（需要时再查规范）
-
-`make_generic_method`、`make_mdarray_type` / `new_mdarray_*`、Native `__zents_*` —— 见 [05-LIB](/docs/spec/05-LIB/)。
-
-## 相关文档
-
-- [05-LIB](/docs/spec/05-LIB/)
-- [方法重载](/docs/guides/overloads/)
-- [泛型](/docs/guides/generics/)
-- [数组](/docs/guides/arrays/)
-- [Attributes](/docs/reference/attributes/)
+`signature(...typeArgs)` 构造规范参数签名；`types` 提供常用 CLR 完整名称常量。已移除的 `register_method` 和 `make_generic_method` 不应出现在新代码中。完整参数表见[JS API](../reference/js-surface.md)。

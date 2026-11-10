@@ -1,49 +1,32 @@
 ---
 sidebar_position: 3
-title: 兼容性
-description: Unity 版本、运行时与平台支持范围。
+title: "兼容性与平台范围"
 ---
 
-# 兼容性
+# 兼容性与平台范围
 
-## Unity / 团结
+## Unity 版本政策
 
-| 版本 | 状态 |
-|------|------|
-| Unity **2021.3.x** | ✅ 支持 |
-| Unity **2022.3.x** | ✅ 支持 |
-| Unity **6000.0.x** | ✅ 支持 |
-| Unity **6000.3.x** | ✅ 支持 |
-| Unity **6000.5.x** | ✅ 支持 |
-| **团结引擎 1.x.y** | ✅ 支持 |
+ZenTS 支持 **Unity 2022.3.x LTS 及更高版本的 LTS**，以及基于 2022.3.x LTS 的**团结引擎**。2021.3 和非 LTS 版本不在本产品支持政策内。补丁目录存在某个版本不代表该组合已验收；安装仍须找到匹配补丁并通过实际构建。
 
-libil2cpp patch 解析见 [多版本管理](/docs/spec/11-MULTI-VERSION/)。
+## 后端与平台
 
-## 脚本 VM 与运行时
+| 环境 | 后端 | 当前集成与证据 |
+|---|---|---|
+| Windows x64 Editor | Mono + V8 | 全量回归与 Inspector 验收 |
+| macOS ARM64 Editor | Mono + V8 | 全量回归、Inspector 协议验收；重载退出限制见项目状态 |
+| macOS x64 Editor | Mono + V8 | 插件已编译；未运行 Intel Editor |
+| Win64 Player | IL2CPP + V8 | 全量回归 |
+| macOS ARM64 / x64 Player | IL2CPP + V8 | 运行验证通过；x64 在 Rosetta 下执行 |
+| Android ARM64 / x64 | IL2CPP + V8 | MuMu 模拟器运行验证通过；ARM64 使用模拟器转译 |
+| iOS x64 Simulator | IL2CPP + JITless V8 | 模拟器运行验证通过 |
+| iOS ARM64 Device | IL2CPP + JITless V8 | 无签名编译通过，未作真机运行验收 |
+| WebGL | IL2CPP/WASM + HostJs | Chrome 实际运行、GC、Reset 与受限宿主验证 |
+| 微信小游戏 | IL2CPP/WASM + HostJs | 官方 SDK 转换及开发工具运行通过，未作手机真机验收 |
+| 团结引擎 | Editor 使用 V8；原生 Player 使用静态 V8；WebGL/微信使用 HostJs | 已支持；微信目标识别 `WeixinMiniGame`，使用对应构建流程 |
 
-| 类别 | 状态 |
-|------|------|
-| **脚本 VM** | Editor 与非 HostJs Player：**QuickJS**（pin 见包内 `ZenTS~/`）。**WebGL Player：宿主 JS**。无 PUC-Rio / LuaJIT 切换 |
-| **Editor** | **Mono**（Expression Emit；与 Il2Cpp **JS 可见语义一致**） |
-| **Player** | **Il2Cpp**（权威实现；`zents-runtime` C++ 桥） |
+原生平台只提供 V8 路线；没有可用 V8 SDK 的平台不自动获得支持。HostJs 也只涵盖已接入目标，不能由名称含 MiniGame 推断抖音、鸿蒙、车机或其他平台均已支持。
 
-**Il2Cpp 构建：** 发布前执行 **`ZenTS/Generate/All`**（C++ stub，**不是** C# Wrap）。见 [构建](/docs/guides/build/)、[Editor 与 Player](/docs/guides/editor-vs-player/)。
+HostJs 当前要求 `Proxy`、`BigInt`、`WeakRef`、`FinalizationRegistry` 等能力；缺少弱引用能力会明确失败。当前为单线程同步桥接，不能把 Worker 当作任意 CLR 同步调用线程。
 
-## 目标平台
-
-| 类别 | 范围 |
-|------|------|
-| **Editor（开发）** | **Windows x64**、**macOS**（Apple Silicon / Intel） |
-| **Player（Il2Cpp）** | 设计覆盖 **Unity / 团结 Il2Cpp 常规支持的全部目标**，包括但不限于：**Win64**、**Android**、**iOS**、**WebGL**、**微信小游戏**、**鸿蒙 / 车机**，以及其它桌面 / 移动 / 小游戏 / 车载等 Il2Cpp 可构建平台 |
-
-非 HostJs 目标在 Install 后把 QuickJS 源码链进 Player。**WebGL Player 的引擎是宿主 JS**，不把 QuickJS 编进 WASM。细则见 [QuickJS 构建](/docs/spec/build/01-QUICKJS/) §5 与 [HostJs](/docs/spec/build/06-HOSTJS/)。
-
-| 目标 | 脚本引擎 |
-|------|----------|
-| Editor，以及 Win64 / Android / iOS 等非 HostJs Player | QuickJS |
-| WebGL Player | 宿主 JS（HostJs） |
-| 目标名含 `MiniGame` / `Weixin` / `Douyin` / `TikTok` | 与 WebGL 相同，不安装 QuickJS。模板本身不在本期 |
-
-其它平台问题请提交 [Issue](https://github.com/focus-creative-games/zen-ts/issues)。
-
-语义契约以 [规范文档](/docs/category/spec/) 为准，与实现细节分离。项目阶段见 [项目状态](/docs/getting-started/project-status/)。
+具体版本、测试计数和历史证据见[项目状态](/docs/getting-started/project-status/)。源码与二进制匹配要求见[构建](/docs/guides/build/)。

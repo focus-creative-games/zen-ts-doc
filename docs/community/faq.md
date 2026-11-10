@@ -1,137 +1,42 @@
 ---
 sidebar_position: 1
-title: FAQ
-description: 常见问题。
+title: "常见问题"
 ---
 
-# FAQ
+# 常见问题
 
-按主题分类；未覆盖见 [排障](/docs/guides/troubleshooting/) 或 [GitHub Issues](https://github.com/focus-creative-games/zen-ts/issues)。
+## 是否仍然支持 QuickJS？
 
-## 一般
+已彻底移除，不提供旧引擎回退。原生使用官方 V8 静态库，WebGL/微信使用平台 JS VM。V8 不支持的其他原生目标不因此自动获得支持。
 
-### ZenTS 和以前的 ZTS 是什么关系？
+## 是否需要下载源码放进 Packages？
 
-**ZenTS** 是产品正式名称（曾用名 **ZTS**）。代码侧小写标识为 `zents`（标准库 `zents.*`、错误前缀 `zents:`），Unity 包与 GitHub 仓库为 [`zen-ts`](https://github.com/focus-creative-games/zen-ts)，官网为 [https://zen-ts.com](https://zen-ts.com)。文档与示例一律使用新名称。
+不需要。支持 Git URL 安装的只读 PackageCache。SDK 安装到 Library，Editor 插件与稳定 `.meta` 自动生成到 Assets。见[安装](../guides/install.md)。
 
-### ZenTS 和 ZLua 是什么关系？
+## 无 Wrap 白名单是否等于不用生成代码？
 
-同属 Code Philosophy 产品线：**语义同构**（`GetFunction`、Marshal、strict miss、Event 用 `add_`/`remove_`、双运行时等），脚本语言不同（JS/TS vs Lua）。可 **同工程并存**（不同 AppDomain 门面：`JsAppDomain` / `LuaAppDomain`），VM 与包彼此独立。选型叙事见 [为什么选择 ZenTS](/docs/concepts/why-zents/)；Lua 侧见 [ZLua 文档](https://doc.zlua.cn)。
+不是。类型/成员懒绑定免除逐类型 Wrap 清单，IL2CPP 仍需要保留元数据、闭合泛型和签名桥，执行 Generate 并在 Player 验证。
 
-### 有 Unreal Engine 版本吗？
+## 是否内置 Node.js？
 
-有，仓库名为 **[zts-ue](https://github.com/focus-creative-games/zts-ue)**：面向 UE、对 C++ 优化的现代 TypeScript 方案。**目前仍在开发中**；本站文档仅覆盖 **Unity / 团结** 上的 ZenTS，UE 用法与进度请跟进该仓库，勿与 Unity Issue 混提。
+不内置。Node 用于构建 TypeScript 和打包，VS Code node 适配器可连接 Inspector；两者都不意味着运行时提供 require('fs') 等 Node 标准库。
 
-### 运行时会执行 TypeScript 吗？
+## long 为什么不是 bigint？
 
-**不会。** 运行时只跑 emit 后的 **ES module（JS）**。TS 负责编辑期类型与闸门检查。见 [TypeScript 工作流](/docs/guides/typescript-workflow/)。
+按设计默认 number，允许 IEEE-754 精度损失。需要完整 64 位范围时，对具体 long/ulong 槽位显式标注 BigInt。object 不猜 long/ulong，整个数组也不自动切换策略。
 
-### 当前适合上生产吗？
+## out 要不要传 null 占位？
 
-处于 **Alpha**：Editor Mono 与 Il2Cpp Player（Win64 / Android / iOS 等）主路径已过内部矩阵；Player 设计覆盖 **Il2Cpp 支持的全部平台**（含 WebGL、小游戏、鸿蒙 / 车机等）。API/规范可能迭代，接受 Install、Generate、libil2cpp 维护成本后再上业务。见 [项目状态](/docs/getting-started/project-status/)、[兼容性](/docs/getting-started/compatibility/)。
+不要。JS→CLR 的 out 不占输入，值进入返回元组；ref 不加入该元组。C#→JS byref 使用调用期 Opaque，规则不同。
 
-### Demo 打不开 / 包路径报错？
+## Reset 能否刷新 XML 或执行下载的新源码？
 
-检查：已支持的 Unity / 团结版本、UPM `file:` 或 git 路径、Node（仅 ts-demo / `TsProject`）、是否按 demo README 打开正确工程。见 [兼容性](/docs/getting-started/compatibility/)、[安装](/docs/guides/install/)。
+Reset 不重载 AOT XML。原生脚本可按加载器能力重建上下文；HostJs 只能使用已预编入产物的模块和源码变体，不是动态 eval 服务。
 
----
+## 微信是否已经支持？
 
-## 安装、Generate 与脚本目录
+Unity 和团结引擎均已支持微信小游戏，使用平台 JS VM，并已在微信开发者工具运行适用测试。手机真机与上传发布不在此处的验证范围内。详见[状态](../getting-started/project-status.md)。
 
-### 发布前要不要 Generate？
+## 为什么测试数不是平台覆盖率？
 
-**Il2Cpp Player：要。** 菜单 **`ZenTS/Generate/All`** 生成 **C++ MethodBridge stub**，**不是** Puerts/xLua 式海量 C# Wrap。Editor Mono 日常迭代 **不必** 每次 Generate。**C#→JS（`GetFunction`）无 Generate 步骤。** TypeScript 声明用 **`ZenTS/Generate Typings`**，类型集须与 Generate **同源**。
-
-### 脚本放哪里？Editor 和 Player 一样吗？
-
-| 形态 | Editor 权威源 | Player |
-|------|---------------|--------|
-| 纯 JS | 工程旁 `JsScripts/**/*.js`（或 loader 约定） | Sync 到 `StreamingAssets/Js/`（或约定路径） |
-| TypeScript | `TsProject/src/**` → emit `TsProject/out/**` | 拷贝 `out/**/*.js` → `StreamingAssets/ZenTS/` |
-
-canonical 模块名 **不含** `.js` / `.ts`（如 `"app"`、`"game/logic"`）。见 [构建](/docs/guides/build/)、[C# 调用 JS](/docs/guides/csharp-calling-js/)。
-
----
-
-## 类型与语法
-
-### `csharp:` 和 `CSharp` 有什么区别？
-
-**同一套类型对象**，两种入口：
-
-- `import { Demo } from "csharp:Assembly-CSharp"` — ESM / TS 推荐
-- `CSharp['Assembly-CSharp'].Demo` — 根表懒绑定
-
-含 namespace须 `CSharp.AC['MyGame.UI.Panel']` 或 `import { Panel } from "csharp:Assembly-CSharp/MyGame.UI"`。迁移用的 `CS.*` 是 **adaptor**，不是核心 API。见 [JS 调用 C#](/docs/guides/js-calling-csharp/)。
-
-### Event 怎么订阅？
-
-**没有** Event 专用对象，也没有可靠的 `.get` / `.set` / 赋值糖。使用：
-
-```javascript
-obj.add_OnHpChanged(handler);
-obj.remove_OnHpChanged(handler); // 必须是同一 function 引用
-```
-
-与 ZLua 同构。见 [JS 调用 C# · Event](/docs/guides/js-calling-csharp/)。
-
-### ref / out 怎么用？
-
-- **C#→JS**（`GetFunction`）：byref 默认 **OpaqueValue**，用 `zents.get_opaquevalue` / `set_opaquevalue`；**不可跨帧持久化**。
-- **JS→C#**：裸 `number` **不写回**；同型 ByVal struct exotic 或 Opaque 可写回。
-
-详见 [ref/out/in](/docs/guides/ref-out-in/)。
-
-### 为什么访问不存在的成员会抛错（strict miss）？
-
-ZenTS 对未知成员 **throw `Error('zents: …')`**，**不**返回 `undefined`。依赖「读不到就 undefined」的旧习惯需要改写。见 [排障](/docs/guides/troubleshooting/)。
-
----
-
-## 互操作
-
-### 如何从 C# 调用 JS？
-
-```csharp
-JsAppDomain.Initialize(loader);
-var add = JsAppDomain.GetFunction<Func<int, int, int>>("app", "add");
-```
-
-要求目标模块有 **named export**；`jsModule` 用 canonical；**不要**对 `csharp:` 调 `GetFunction`。热路径缓存 delegate；`Reset` 后旧委托作废。见 [C# 调用 JS](/docs/guides/csharp-calling-js/)。
-
-### TypeScript「进 Play 闸门」是什么？
-
-可选：进 Play 前跑 `tsc --noEmit`，失败则 **阻止 Play**，避免带着类型错误迭代。运行时仍只加载 emit 的 JS。见 [TypeScript 工作流](/docs/guides/typescript-workflow/)。
-
-### JS 调试器在 Player 上能用吗？
-
-规范覆盖的调试器 Host Hook 面向 **Editor Mono**；真机 / Il2Cpp Player attach **本规范不覆盖**。断点、端口、source map 见 [JS 调试器](/docs/guides/js-debugger/)。
-
----
-
-## Editor / Player
-
-### Editor 正常、Player 失败？
-
-按清单排查：
-
-1. 是否 **`ZenTS/Install`** 且 **`ZenTS/Generate/All`**
-2. 脚本是否 Sync / 拷贝到 StreamingAssets；canonical 是否带了多余 `.js`
-3. 是否仍用废弃 Event 糖语法
-4. Typings 与 Generate 是否同源
-5. Build 是否 Il2Cpp、目标平台是否在支持矩阵内
-
-见 [Editor 与 Player](/docs/guides/editor-vs-player/)、[排障](/docs/guides/troubleshooting/)。
-
-### Editor 和 Player 语义会不会不一样？
-
-**JS 可见语义必须一致**；实现路径不同（Mono Expression Emit vs Il2Cpp C++ stub）。发现不一致请按 [测试](/docs/community/testing/) 附最小复现提 Issue。
-
----
-
-## 相关文档
-
-- [排障指南](/docs/guides/troubleshooting/)
-- [规范总览](/docs/spec/00-OVERVIEW/)
-- [迁移](/docs/community/migration/)
-- [联系方式](/docs/community/contact/)
+命名用例、模块、Smoke 和 TS 示例是不同计数。435 个命名用例不等于 ZLua 所有测试或所有设备均覆盖，显式跳过和历史平台验证须分别列出。

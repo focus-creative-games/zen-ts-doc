@@ -3,7 +3,7 @@ sidebar_position: 2
 title: "对象与分派布局"
 ---
 
-> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
+> 本页定义当前互操作契约；平台验收范围与已知限制见[对齐状态](/docs/spec/03-ALIGNMENT/)。
 
 # 01 — 对象与分派布局
 
@@ -37,7 +37,7 @@ Bind 完成后短名冻结；只有全签名键受限解析及闭合泛型缓存
 
 ## 6. 计划与执行对象
 
-CLR 计划只含类型、成员、候选、默认值、策略及绑定域；引擎对象持有函数、prototype、wrapper 与 JS 引用。实际 P1 路径见 [引擎边界](../build/07-ENGINE-BOUNDARY.md)。不能以共享计划为由让 Mono 必须使用 Il2Cpp 执行方式。
+CLR 计划只含类型、成员、候选、默认值、策略及绑定域；引擎对象持有函数、prototype、wrapper 与 JS 引用。当前路径见 [引擎边界](../build/07-ENGINE-BOUNDARY.md)。不能以共享计划为由让 Mono 必须使用 Il2Cpp 执行方式。
 
 ## 7. 门面与缓存
 
@@ -45,4 +45,4 @@ CLR 计划只含类型、成员、候选、默认值、策略及绑定域；引�
 
 ## 8. 引擎映射
 
-V8 handle、HostJs token 和过渡 QuickJS 值都停留在 adapter。getIdentity 不能是移动 GC 后失效的地址；host 句柄带 generation。任何 JS 对象不能仅因拥有 __zents_id 等公开字段就获得 CLR 对象身份。
+V8 handle 和 HostJs token都停留在 adapter。getIdentity 不能是移动 GC 后失效的地址；host 句柄带 generation。任何 JS 对象不能仅因拥有 __zents_id 等公开字段就获得 CLR 对象身份。

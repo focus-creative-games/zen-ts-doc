@@ -3,7 +3,7 @@ sidebar_position: 5
 title: "特殊类型分派"
 ---
 
-> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
+> 本页定义当前互操作契约；平台验收范围与已知限制见[对齐状态](/docs/spec/03-ALIGNMENT/)。
 
 # 04 — 特殊类型分派
 
@@ -15,7 +15,7 @@ title: "特殊类型分派"
 
 无值为 null，有值采用底层 T 的表示，不创建独立 Nullable 实例 IEO。值工厂用 `N(value)`，**目标不提供 `new N(...)` 返回 primitive** 的契约；JS new 的返回值必须是对象。
 
-对合法底层值类型进行构造/转换；enum 无普通构造，其 Nullable 值可按 Marshal 输入而不要求 enum 工厂。默认 Nullable\<long/ulong\> 有值仍是 number，本轮不把 BigInt 标注扩大到整个 Nullable 槽。
+对合法底层值类型进行构造/转换；enum 无普通构造，其 Nullable 值可按 Marshal 输入而不要求 enum 工厂。默认 Nullable\<long/ulong\> 有值仍是 number，不把 BigInt 标注扩大到整个 Nullable 槽。
 
 ## 3. struct
 

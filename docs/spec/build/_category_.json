@@ -5,6 +5,6 @@
   "collapsed": true,
   "link": {
     "type": "generated-index",
-    "description": "QuickJS 引擎构建集成、Editor Mono callback gate、JS 调试器 hook 与原生 C 模块。"
+    "description": "官方 V8 静态 SDK、只读安装、回调边界、Editor Inspector 与 WebGL/微信 HostJs。"
   }
 }

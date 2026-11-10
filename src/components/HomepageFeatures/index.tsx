@@ -34,39 +34,28 @@ export default function HomepageFeatures(): ReactNode {
           <Feature
             icon="⚡"
             title={
-              <Translate id="homepage.feature.easy.title">更易用 · 零配置</Translate>
+              <Translate id="homepage.feature.easy.title">CLR 类型按需绑定</Translate>
             }
             description={
-              <Translate id="homepage.feature.easy.desc">
-                声明式 GetFunction / [JsMarshalAs]，CSharp 懒绑定；无需 per-type Wrap
-                白名单。与 ZLua 同一套产品心智。
-              </Translate>
+              <Translate id="homepage.feature.easy.desc">CSharp / csharp: 懒绑定和共享签名桥，统一重载与 Marshal；无需业务逐类型 Wrap 白名单。</Translate>
             }
           />
           <Feature
             icon="🟦"
             title={
-              <Translate id="homepage.feature.ts.title">TypeScript 一等公民</Translate>
+              <Translate id="homepage.feature.ts.title">TypeScript 与调试</Translate>
             }
             description={
-              <Translate id="homepage.feature.ts.desc">
-                官方 TsProject 工作流、csharp: 声明、进 Play 闸门；运行时仍只执行 emit
-                后的 ES module。
-              </Translate>
+              <Translate id="homepage.feature.ts.desc">TsProject 检查、emit、C# 声明与 Source Map；Editor 内置 V8 Inspector。</Translate>
             }
           />
           <Feature
             icon="📦"
             title={
-              <Translate id="homepage.feature.il2cpp.title">
-                Il2Cpp 就绪 · 双运行时
-              </Translate>
+              <Translate id="homepage.feature.il2cpp.title">原生 V8 与 HostJs</Translate>
             }
             description={
-              <Translate id="homepage.feature.il2cpp.desc">
-                Editor Mono 便于迭代；Player Il2Cpp 走 C++ 桥，签名复用 stub，ByVal /
-                Registry Marshal。
-              </Translate>
+              <Translate id="homepage.feature.il2cpp.desc">原生平台静态链接官方 V8；WebGL/微信使用平台 VM。SDK 存 Library，兼容只读 Git 包。</Translate>
             }
           />
         </div>

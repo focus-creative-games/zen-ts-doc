@@ -3,13 +3,13 @@ sidebar_position: 1
 title: "总览"
 ---
 
-> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
+> 本页定义当前互操作契约；平台验收范围与已知限制见[对齐状态](/docs/spec/03-ALIGNMENT/)。
 
 # 00 — 总览
 
 ZenTS 是 ZLua 的 JavaScript / TypeScript 移植。CLR 类型、成员绑定、重载、Marshal、生命周期和构建配置默认跟随 ZLua；只有 JavaScript 语言与宿主平台确有差异时才单独适配。
 
-**本文及各分册规定目标契约。当前 P0/P1 实现仍使用过渡 QuickJS 适配器；Native V8、完整 HostJs 与新语义尚待后续阶段交付。** 版本基线、实现状态与差异裁决见 [03-ALIGNMENT.md](./03-ALIGNMENT.md)。
+本文及各分册定义当前互操作契约。原生平台及 Editor 使用官方 V8 静态 SDK，WebGL/微信使用平台 VM；QuickJS 已彻底移除。 版本基线、实现状态与差异裁决见 [03-ALIGNMENT.md](./03-ALIGNMENT.md)。
 
 ## 1. 产品目标
 
@@ -36,8 +36,8 @@ Mono 使用反射与 Expression Emit，Il2Cpp 使用元数据和预编译桥；�
 | 继承 | 普通成员 Bind 期扁平化；全签名键另有受限的 miss 懒解析路径 |
 | 短名注册 | Bind 后冻结；不提供正式 `register_method` |
 | XML | 仅适用于 AOT 程序集；不支持 XML 热更新、运行时注册或 Reload |
-| 引擎 | 最终仅 Native V8 / HostJs；QuickJS 不作为长期后端 |
-| JS wrapper | 本规范的 exotic/内部槽是抽象模型，不要求 QuickJS 的 JSClassDef，也不限制为某种 Proxy 实现 |
+| 引擎 | Native V8 / HostJs；QuickJS 已移除且不回退 |
+| JS wrapper | 本规范的 exotic/内部槽是抽象模型，不要求某个引擎 SDK 对象布局，也不限制为某种 Proxy 实现 |
 
 ### 1.4 `undefined` 与 `null`（概要）
 
@@ -64,7 +64,7 @@ JsAppDomain / IJsRuntime / zents / csharp:
 | iOS Player | Il2Cpp | Native V8，JITless |
 | WebGL / 小游戏 | Il2Cpp/WASM | 平台已有 JS VM；不再内嵌 V8 |
 
-这是目标支持矩阵，不是已验收平台清单。当前只验收 Windows Editor 与既有 Win64 导出工程上的 P1 过渡后端。V8 无可用实现的 Native 平台不回退 QuickJS；HostJs 平台也不借此承诺所有平台能力相同。
+支持政策为 Unity 2022.3.x 及后续 LTS，以及基于 2022.3 的团结引擎。上表是后端选择，不等于所有版本和设备已验收。已运行范围、模拟器/工具限制及 Inspector 退出问题见对齐状态；不支持的原生平台无旧引擎回退。
 
 ## 3. 文档地图
 

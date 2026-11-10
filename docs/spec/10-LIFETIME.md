@@ -3,7 +3,7 @@ sidebar_position: 10
 title: "生命周期、GC 与异常"
 ---
 
-> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
+> 本页定义当前互操作契约；平台验收范围与已知限制见[对齐状态](/docs/spec/03-ALIGNMENT/)。
 
 # 10 — 生命周期、GC 与异常边界
 
@@ -50,10 +50,10 @@ Initialize 完成引擎域、模块、AOT 配置快照、Registry 和 frame pump
 
 ## 8. 异常边界
 
-JS 失败转换成可诊断 C# 异常；C# 失败转换成可被 JS try/catch 捕获的错误。托管异常不穿过 native callback ABI，原生引擎异常不跳过 CLR 帧。QuickJS JS_Throw 的 pending-error 模型不等同 Lua longjmp。
+JS 失败转换成可诊断 C# 异常；C# 失败转换成可被 JS try/catch 捕获的错误。托管异常不穿过 native callback ABI，原生引擎异常不跳过 CLR 帧。引擎 pending-error 设置不等同 Lua longjmp 或跨 ABI 的 C++ throw。
 
 每次重入有独立错误槽、参数/返回缓冲、临时 CLR 引用根及 scope；失败后恢复外层状态。不得吞掉错误返回零值或半成品 out 元组。引擎堆栈全文可不同，但错误分类与 zents: 前缀一致。
 
 ## 9. 验收
 
-必须包含增量 GC、含引用 struct、事件闭环解除、嵌套重入、callback 抛错、Reset 前后旧委托、Opaque 过期及宿主内存增长。P1 的已执行结果见 [对齐状态](./03-ALIGNMENT.md)，不能从其推断 V8/小游戏已验收。
+必须包含增量 GC、含引用 struct、事件闭环解除、嵌套重入、callback 抛错、Reset 前后旧委托、Opaque 过期及宿主内存增长。各平台已执行结果见 [对齐状态](./03-ALIGNMENT.md)，不能从单个平台结果推断所有设备、宿主和进程退出都已验收。

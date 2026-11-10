@@ -1,70 +1,41 @@
 ---
 sidebar_position: 11
-title: ref / out / in
-description: byref 参数的默认 Opaque 行为与写回规则。
+title: "ref、out 与 in"
 ---
 
-# ref / out / in
+# ref、out 与 in
 
-权威：[BYREF](/docs/spec/marshal/03-BYREF/)、[OPAQUE](/docs/spec/marshal/04-OPAQUE/)。特性级强制形态见 [JsMarshalAs](/docs/guides/js-marshal-as/)；少分配套路见 [少 GC Marshal](/docs/guides/zero-gc-marshal/)。
+双向调用采用不同形态。最容易出错的是把 C# out 占位参数机械搬到 JavaScript 调用中。
 
-## 双路径摘要
+## JavaScript → C#
 
-| 方向 | 行为 |
-|------|------|
-| **C# → JS**（`GetFunction` / delegate 桥） | `ref` / `out` / `in` 默认 Push **OpaqueValue** |
-| **JS → C#** | **不**按 `ref`/`out`/`in` 关键字区分 Pop；**能否写回**看实参形态 |
-
-## 写回规则（直觉）
-
-| JS 实参形态 | 写回 C# byref |
-|------------|---------------|
-| OpaqueValue（`get`/`set_opaquevalue`） | ✅ |
-| 同型 ByVal exotic（如 struct） | ✅（真 ref 语义） |
-| 裸 `number` / `string` / 多数 ByObj | ❌（拷入临时槽） |
-
-```javascript
-let x = 5;
-Demo.Increment(x);          // 若形参为 ref int：裸 number 不写回，x 仍为 5
-
-const p = new Point2D(1, 2);
-Demo.Offset(p);             // ref Point2D：字段可写回 p
+```csharp
+public static int Split(int value, out int twice)
+{
+    twice = value * 2;
+    return value;
+}
 ```
 
-类型不兼容 → `throw Error('zents: …')`。必选 byref 传 `undefined`（临时槽路径）通常 **throw**；需观察写回时传 ByVal exotic 或有效 Opaque。
-
-## Opaque 读写
-
-C#→JS 拿到的 byref 槽位通常是 Opaque：
-
 ```javascript
-// 在同一次同步调用链内
-const v = zents.get_opaquevalue(slot);
-zents.set_opaquevalue(slot, newValue);
+const Demo = CSharp['Assembly-CSharp']['Demo'];
+const [result, twice] = Demo.Split(5); // [5, 10]
 ```
 
-对 `ref Point2D` 等值类型形参，传入同型 **ByVal exotic**（如 `new Point2D(1, 2)`）即可写回；无需额外 API。详见 [值类型](/docs/guides/value-types/)、[zents 标准库](/docs/guides/zents-lib/)。
+out **不占输入**。有普通返回值时结果为 `[returnValue, out1, ...]`，void 时为 `[out1, ...]`，没有 out 时保留普通返回形态。不要多传一个 null 作为占位。嵌套的 UnpackedValues 仍是独立数组，不自动展平。
 
-:::warning
-Opaque **不可**跨异步边界 / 跨帧持久化当长期句柄用。需要 ByVal 门面时用 `zents.to_user_data`（见规范）。失效后访问 → `throw Error('zents: invalid opaque parameter handle')`。
-:::
+ref/in 占输入。兼容的 Opaque 或精确 ByVal struct 可直接作为输入存储，否则使用临时存储。ref 的临时重赋值不会重新绑定 JS 变量，**也不追加到 out 返回元组**。对象或数组的原地修改仍可见。
 
-## 分类要点
+## C# → JavaScript
 
-| 元素类型 A | 可写回 JS 原值的典型路径 |
-|-----------|--------------------------|
-| 值类型（struct / enum） | 同型 ByVal exotic，或 Opaque |
-| 基元 | 仅 Opaque；改 JS `let` 绑定 **无** 路径 |
-| `string` / 引用类型 | Opaque；临时槽路径下 C# **重新赋值** 不反映到原 JS 绑定；**原地改可变对象**仍可见 |
+ref/out/in 参数使用调用期 Opaque：
 
-## 与值类型章的关系
+```javascript
+export function fill(output) {
+  zents.set_opaquevalue(output, 42);
+}
+```
 
-by-val struct 是 **拷贝**；要「改字段并反映到 C#」须对 `ref` 形参传入同型 ByVal exotic，或走 Opaque。见 [值类型](/docs/guides/value-types/)、[Struct Marshal](/docs/spec/marshal/05-STRUCT/)。
+读取使用 `zents.get_opaquevalue`，写入使用 `set_opaquevalue`。in 为只读；句柄只能在该次 C#→JS 调用返回前使用，不可保存后在 Promise/await 中继续访问。过期访问必须失败。
 
-## 相关文档
-
-- [BYREF](/docs/spec/marshal/03-BYREF/)
-- [OPAQUE](/docs/spec/marshal/04-OPAQUE/)
-- [JsMarshalAs](/docs/guides/js-marshal-as/)
-- [少 GC Marshal](/docs/guides/zero-gc-marshal/)
-- [值类型](/docs/guides/value-types/)
+显式 Marshal 策略作用于合法的 byref 元素槽位，例如 long/ulong 的 BigInt；句柄本身不是整数。完整地址、临时值与回写规则见[byref 规范](../spec/marshal/03-BYREF.md)。

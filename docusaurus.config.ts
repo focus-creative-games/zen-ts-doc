@@ -3,8 +3,8 @@ import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
-  title: 'ZenTS 文档',
-  tagline: '零配置 · 完备 C# 互操作 · QuickJS 上的 TypeScript / JavaScript',
+  title: 'ZenTS',
+  tagline: 'TypeScript / JavaScript · CLR 懒绑定 · V8 与平台 JS VM',
 
   favicon: 'img/logo.jpg',
 

@@ -1,123 +1,37 @@
 ---
 sidebar_position: 4
-title: "zents 与 csharp:"
-description: 脚本侧全局与模块速查。
+title: "JavaScript API"
 ---
 
-# zents 与 csharp:
+# JavaScript API
 
-脚本侧三条表面分工明确：**类型访问**走 `CSharp` / `csharp:`；**辅助构造与转换**走 `zents`；**实例成员**经 exotic 三表，**不经** `zents`。
+`CSharp[assembly][fullClrName]` 懒获取类型对象，`csharp:` named import 指向同一对象。成员构造使用 new，实例方法使用 JS this。下表为当前 zents 门面；类型规则详见[标准库规范](../spec/05-LIB.md)。
 
-权威全文：[02-TYPE-SYSTEM](/docs/spec/02-TYPE-SYSTEM/) · [05-LIB](/docs/spec/05-LIB/) · [metatable](/docs/spec/metatable/)。
+| API | 含义 |
+|---|---|
+| `typeof(typeObject)` | 得到 System.Type wrapper |
+| `get_type_from_name(fullName)` | 按完整 CLR 名解析类型 |
+| `make_generic_type(type, ...args)` | 闭合泛型类型，也接受一个 args Array |
+| `inflate(owner, key, ...args)` | 闭合方法泛型，也接受一个 args Array |
+| `make_szarray_type(elementType)` | 创建 SZArray 类型 |
+| `new_szarray_by_element_type(type, length)` | 按元素类型创建 SZArray |
+| `new_szarray_by_szarray_type(type, length)` | 按数组类型创建 SZArray |
+| `make_mdarray_type(elementType, rank)` | 创建多维数组类型 |
+| `new_mdarray_by_spec(type, lowbounds, sizes)` | 按元素、下界、长度创建多维数组 |
+| `new_mdarray_by_mdarray_type(type, lowbounds, sizes)` | 按多维数组类型创建 |
+| `to_array(szarray)` | 复制成零基 JS Array |
+| `to_bytes(array)` | 复制可接受 blittable CLR 数组的原始字节 |
+| `to_delegate(func, delegateType)` | 转为指定闭合 CLR 委托 |
+| `get_opaquevalue(handle)` | 读取有效调用期 Opaque |
+| `set_opaquevalue(handle, value)` | 写入非只读且有效的 Opaque |
+| `to_user_data(handle)` | 按规则将 Opaque 对应值转为正式 wrapper |
+| `box(typeArg, value)` / `unbox(value)` | 装箱 / 取值 |
+| `cast(obj, targetType)` | 转换到兼容声明门面 |
+| `signature(...typeArgs)` | 构造 CLR 参数签名，亦接受一个 Array |
+| `types` | 常用 CLR 完整名称常量，如 int32、long、string |
 
----
+公共 typeArg 支持类型对象、完整类型名和 System.Type wrapper；GTAP 前缀更严格，仅支持 System.Type wrapper。
 
-## `CSharp` 根对象
+数组 wrapper 提供 `length`、`get`、`set`，不通过整数属性直接访问。事件使用 `add_Event`/`remove_Event`。普通 CLR 成员 miss 抛错；then/Symbol 探测例外见类型规范。
 
-全局 **`CSharp`** 是访问托管类型的 **权威低层入口**。程序集与类型均为 **懒加载**。
-
-```javascript
-CSharp['Assembly-CSharp']              // 程序集（简单名，无 .dll）
-CSharp.AC = CSharp['Assembly-CSharp']; // 可选别名
-CSharp.AC.Demo                         // 无命名空间
-CSharp.AC['MyGame.UI.Panel']           // 含命名空间：强制括号
-CSharp.AC['Outer+Inner']               // 嵌套类型：+ 分隔
-```
-
-| 层级 | miss 行为 |
-|------|-----------|
-| `CSharp[assembly]` | 懒创建并缓存；程序集不存在 → **`throw Error('zents: assembly not found: …')`** |
-| `assembly[typeFullName]` | 解析 Type → **EnsureBinding** → 缓存；不存在 → **`throw Error('zents: type not found: …')`** |
-
-**禁止**对不存在的程序集 / 类型返回 `undefined`。
-
-类型对象：静态成员、`new Type(...)` 构造。实例 exotic：实例字段 / 方法（静实例隔离）。
-
----
-
-## `csharp:` 虚拟模块（推荐）
-
-与 `CSharp[assembly][typeFullName]` **identity 等价** 的 ES `import`；不改变 EnsureBinding / 三表 / miss 语义。
-
-```javascript
-import { Demo } from "csharp:Assembly-CSharp";
-import { Panel } from "csharp:Assembly-CSharp/MyGame.UI";
-import { GameObject } from "csharp:UnityEngine.CoreModule/UnityEngine";
-import { List, List$1 } from "csharp:mscorlib/System.Collections.Generic";
-
-const panel = new Panel();
-```
-
-| 规则 | 说明 |
-|------|------|
-| Specifier | `csharp:` + 程序集简单名 + 可选 `/` + 命名空间或声明类型全名 |
-| 拦截时机 | 宿主 `moduleLoader` **之前**；**禁止**把 `csharp:` 传给业务 loader |
-| Export | **仅** named export（类型对象）；**无** default export |
-| 泛型短名 | `` List`1 `` → `List$1`；无冲突时可额外导出 `List`（同一对象） |
-| 嵌套 | 声明类型模块：路径末尾字面量 `+`，如 `"csharp:asm/Foo.Bar+"` |
-| `GetFunction` | **不应**以 `csharp:` 作业务模块（named export 一般非 callable） |
-
-完整文法与命名空间 / 嵌套判定：[02-TYPE-SYSTEM](/docs/spec/02-TYPE-SYSTEM/) §2.11。
-
----
-
-## Strict miss
-
-对 **CSharp 根、程序集对象、类型对象、CLR 实例 exotic**：
-
-| 操作 | 行为 |
-|------|------|
-| 读/写未注册成员 | **`throw Error('zents: …')`**（含键名，如 `member not found`） |
-| 只写属性读 | **`throw Error('zents: property has no getter: …')`** |
-| 普通 JS object | 仍返回 `undefined`（标准语义） |
-| `import * as ns; ns.Missing`（`csharp:` 模块命名空间） | 标准 ES → **`undefined`**（**不是** CSharp miss throw） |
-
-**无**反射 fallback。详见 [metatable/02-INDEX](/docs/spec/metatable/02-INDEX/)。
-
----
-
-## 方法 `this` 绑定
-
-```javascript
-demo.setX(1);              // ✅ 方法调用：自动传入 CLR this
-const fn = demo.setX;
-fn(1);                     // ❌ 提取函数：不自动绑定；行为未定义或抛错（实现须一致且可诊断）
-
-Type.staticMethod(a, b);   // 静态：无 this
-```
-
-重载 short 名注册后同样依赖方法调用形式：`demo.run_i32(5)`。见 [04-METHOD-OVERLOAD](/docs/spec/04-METHOD-OVERLOAD/)、[functions 指南](/docs/guides/functions/)。
-
----
-
-## `zents.*` 摘要表
-
-初始化时 native 注册 `__zents_*` hook，再加载 `zentslib.js` 封装为 `zents.*`（与 `CSharp` 同在主 `JSContext` 全局）。
-
-| API | 说明 |
-|-----|------|
-| `typeof(typeObject)` | ≡ C# `typeof` → `System.Type` ByObj exotic（**不作** `make_*` 的 typeArg） |
-| `types.*` | mscorlib 预置常量（`int32`、`string` 等） |
-| `get_type_from_name(name)` | 对标 `Type.GetType`；找不到 → throw |
-| `make_generic_type` / `make_generic_method` | 闭合泛型类型 / 单态化泛型方法 |
-| `make_szarray_type` / `make_mdarray_type` | 数组类型对象 |
-| `new_szarray_*` / `new_mdarray_*` | 创建数组实例 |
-| `to_array` / `to_bytes` | szarray → JS Array / 原始字节（blittable） |
-| `get_opaquevalue` / `set_opaquevalue` | 同步链内读写 Opaque |
-| `to_user_data` | Opaque **拷贝** 为 ByVal struct exotic |
-| `box` / `unbox` / `cast` | 装箱 / 拆箱 / 引用类型 IEO 门面 |
-| `to_delegate` | JS function → 指定 Delegate 类型（形参常可直传 function） |
-| `signature` / `register_method` | 参数括号串；空位挂短名（注册后方法调用绑 `this`） |
-
-失败路径统一 **`throw Error('zents: …')`**，**不**用 `undefined` 表示 miss。
-
-指南：[zents 标准库](/docs/guides/zents-lib/) · 全文 [05-LIB](/docs/spec/05-LIB/)
-
----
-
-## 相关文档
-
-- [JS 调用 C#](/docs/guides/js-calling-csharp/)
-- [类型系统概览](/docs/concepts/type-system-overview/)
-- [Exotic 模型](/docs/concepts/exotic-model/)
-- [参考总览](/docs/reference/overview/)
+没有 `register_method` 或 `make_generic_method`。内部 `__zents_*` 不是可依赖的业务 API，V8 和 HostJs 内部句柄也不能混用。

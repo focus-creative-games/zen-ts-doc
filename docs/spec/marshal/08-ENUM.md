@@ -3,7 +3,7 @@ sidebar_position: 14
 title: "枚举 Marshal"
 ---
 
-> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
+> 本页定义当前互操作契约；平台验收范围与已知限制见[对齐状态](/docs/spec/03-ALIGNMENT/)。
 # 枚举 Marshal
 
 > **规范性：** C# `enum` 在 JavaScript 与 C# 之间的默认 Marshal 规则。
@@ -133,6 +133,6 @@ C#→JS：`ref enum` 默认 **OpaqueValue**。
 
 ## 11. 显式 BigInt 的边界
 
-enum 的默认常量、参数、返回值按底层整数转换成 number，即使底层是 Int64/UInt64 也不会自动 bigint。本轮 BigInt 标注的合法目标仅为 Int64/UInt64 槽，不能直接标在 enum 上。
+enum 的默认常量、参数、返回值按底层整数转换成 number，即使底层是 Int64/UInt64 也不会自动 bigint。BigInt 标注的合法目标仅为 Int64/UInt64 槽，不能直接标在 enum 上。
 
 JS→CLR out enum 不占输入，以结果元组返回 number；C#→JS 的 out enum 仍为 Opaque。旧正文中 byref 的输入分支仅适用于 ref/in，不能用作 out 占位规则。

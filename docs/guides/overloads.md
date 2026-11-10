@@ -1,120 +1,32 @@
 ---
 sidebar_position: 10
-title: 方法重载
-description: 默认分派、全签名键、JsAlias 与 register_method 短名。
+title: "重载、签名与 params"
 ---
 
-# 方法重载
+# 重载、签名与 params
 
-JavaScript 无静态类型，同名多签名不能靠编译期选定。ZenTS 提供：默认分派、**全签名键**（Bind 自动）、`[JsAlias]`、以及 `zents.register_method` 短名。权威细则：[方法重载规范](/docs/spec/04-METHOD-OVERLOAD/)。
+优先使用自然短名，只有在歧义或需要指定版本时才使用全 CLR 签名键。短名候选在类型绑定后冻结；不提供运行时注册方法的 API。
 
-日常 `demo.Run(10)` 在 [JS 调用 C#](/docs/guides/js-calling-csharp/) 已够用；歧义或热路径再读本篇。
-
-## 怎么选
-
-| 方式 | 写法 | 何时用 |
-|------|------|--------|
-| 默认 dispatch | `demo.Run(10)` | 实参能唯一匹配 |
-| **全签名键**（自动） | `demo['Run(System.Int32)'](5)` | 精确点名；**无需** `register_method` |
-| `[JsAlias]` | `demo.run_i32(5)` | 能改 C#，热路径短名 |
-| `register_method` | 注册后 `demo.run_i32(5)` | 不能改 C#，又要短名 |
-
-### 方法调用 vs 提取函数
-
-| 写法 | CLR `this` |
-|------|------------|
-| **方法调用** `obj.Method(args)` / `obj['Run(System.Int32)'](5)` | ✅ 自动绑定 |
-| **提取** `const fn = obj.Method; fn(args)` | ❌ 不绑定（未定义或抛错；实现须可诊断） |
-
-全签名键含括号，须用属性访问再 **以方法调用形式** 调用：`obj['Run(System.Int32)'](10)`。**不要**写成 Lua 式显式传 `self`。
-
-## 默认 dispatch
+假设静态 Demo 有 Add(int,int)：
 
 ```javascript
-demo.Run(10);        // Run(int)
-demo.Run("hello");  // Run(string)
+const Demo = CSharp['Assembly-CSharp']['Demo'];
+Demo.Add(2, 3);
+Demo['Add(System.Int32,System.Int32)'](2, 3);
 ```
 
-仅一个 public 重载时为零分派；多个时按实参匹配。无匹配 → `throw Error('zents: no overload for …')`。
+全签名键按 miss 懒解析并缓存，**即使只有一个候选也适用**；继承方法和被 Alias 换名的方法仍按原 CLR 方法名进行精确签名访问。不要凭空把 JS 数值标签当作 CLR 签名。
 
-## 默认参数
+## 匹配原则
 
-支持 C# **尾部**可选形参（`HasDefault`）。JS 实参个数可落在 `[minArity, maxArity]`；省略的尾部在 invoke 时填 C# 默认值。
+匹配考虑 arity、可选默认值、类型可转换性、声明门面、泛型和 params。bool 不按 truthiness 转换；整数要求有限、整数值和范围匹配；必选引用参数的 undefined 不等于 null。多个同等合适候选会报告歧义，不依靠枚举顺序选第一个。
 
-```csharp
-public static int Foo(int x, int y = 5) => x + y;
-public static int G(int x) => x;
-public static int G(int x, int y = 5) => x + y;
-```
+JS number 不携带 int/float/long 的静态标签。确需选择时用签名键，而不是通过改变一个数值的写法猜选中重载。
 
-```javascript
-Demo.Foo(1);       // y=5
-Demo.Foo(1, 9);
-Demo.G(1);         // 选 G(int)，而非「用默认展开」的 G(int,int)
-Demo.G(1, 4);      // G(int, int)
-```
+## params
 
-| 规则 | 说明 |
-|------|------|
-| 仅尾部连续默认 | 与 C# 相同：中间不能「跳过」必选形参 |
-| 过少实参 | 无法覆盖到首个无默认形参 → 无匹配重载 |
-| 多重载 tie-break | 转换分数相同时，**少用默认参数**的候选更优 |
-| `undefined` | 可选形参可用；**必选**形参传 `undefined` → 不匹配 |
-| 构造 | `new Type(...)` 同样支持 |
+固定前缀之后可传 0..N 个元素，或一个类型匹配的 CLR 数组 wrapper。JS Array/TypedArray 不自动当作整个 params 数组；需要展开时用 spread。null 按元素候选参与匹配，不表示整个 null params 数组。
 
-## 全签名键（同名冲突时自动注册）
+普通非 params 的数组参数仍按数组规则接收连续 JS Array 或 null。GetFunction/delegate bridge 按固定签名处理，不进行此展开。
 
-当同一最终名有多个重载时，除 dispatch 外，Bind 还会为每个候选挂 **direct** 键：`方法名(参数 Type.FullName, …)`（**不含**返回类型）。
-
-```javascript
-demo.Run(5);                              // dispatch
-demo['Run(System.Int32)'](5);            // direct；方法调用绑定 this
-demo['Run(System.String)']("hi");
-
-const fn = demo['Run(System.Int32)'];
-fn(5);                                    // ❌ 提取后不绑定 this
-```
-
-| 键 | 含义 |
-|----|------|
-| `Run` | 运行时分派 |
-| `Run(System.Int32)` | 固定 `Run(int)` |
-| `Run(System.String)` | 固定 `Run(string)` |
-
-`zents.signature(zents.types.int32)` 只生成 `"(System.Int32)"`，**不能**单独当键。
-
-## `[JsAlias]` 与 `register_method`
-
-```csharp
-[JsAlias("run_i32")]
-public void Run(int value) { }
-public void Run(string value) { }
-```
-
-```javascript
-demo.run_i32(10);   // 短名；Run(int) 已换名，不再挂 "Run"
-demo.Run("hi");     // 未换名的 Run(string)
-
-const run = demo['Run(System.Int32)'];
-zents.register_method("run_hot", run);
-demo.run_hot(5);    // 空位短名；已占用名 → throw
-```
-
-别名是 **换名**（替换默认 JS 键），不是追加。详见 [JsAlias](/docs/guides/js-alias/)。扩展方法与实例合并候选见 [扩展方法](/docs/guides/extension-methods/)。
-
-## 常见错误
-
-| 现象 | 处理 |
-|------|------|
-| 调错重载 / ambiguous | 全签名键、`[JsAlias]` 或 `register_method` |
-| `argument mismatch`（带默认） | 必选形参未给够；不能跳过中间参数 |
-| 仅用 `'(System.Int32)'` 作键 | **禁止**；须 `Run(System.Int32)` |
-| 提取后调用无 this | 保持 `obj.Method(...)` 方法调用形式 |
-| `register_method` 报已占用 | 换未使用的别名；不要覆盖 `Run` / 全签名键 |
-
-## 相关文档
-
-- [JsAlias](/docs/guides/js-alias/) — Attribute + XML
-- [方法重载规范](/docs/spec/04-METHOD-OVERLOAD/)
-- [zents 标准库](/docs/guides/zents-lib/)
-- [扩展方法](/docs/guides/extension-methods/)
+泛型方法可用 `zents.inflate` 消除泛型选择的不确定性。完整选优顺序和惩罚规则见[重载规范](../spec/04-METHOD-OVERLOAD.md)。

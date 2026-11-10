@@ -3,12 +3,12 @@ sidebar_position: 10
 title: "OpaqueValue（临时不透明参数）"
 ---
 
-> 本页为目标契约；交付状态与迁移基线见 [对齐说明](/docs/spec/03-ALIGNMENT/)。
+> 本页定义当前互操作契约；平台验收范围与已知限制见[对齐状态](/docs/spec/03-ALIGNMENT/)。
 # OpaqueValue（临时不透明参数）
 
 > **规范性：** C# 调用 JavaScript 时，将形参/局部在 C# 调用栈上的存储地址暴露给脚本的临时令牌；以及 `[JsMarshalAs(OpaqueValue)]` 强制路径。
 > **byref 默认（C#→JS）：** `ref`/`in`/`out` **默认** OpaqueValue，见 [03-BYREF.md §2](./03-BYREF.md)。
-> **API：** `zents.get_opaquevalue` / `zents.set_opaquevalue`（native 内部 hook），签名见 [../05-LIB.md](../05-LIB.md)。
+> **API：** `zents.get_opaquevalue` / `zents.set_opaquevalue`（公开门面，内部 hook 不对业务开放），签名见 [../05-LIB.md](../05-LIB.md)。
 
 ---
 
@@ -85,15 +85,15 @@ function OnPoint(h) {
 
 | handle 指向 | 行为 |
 |-------------|------|
-| 非 byref | 对槽值走 [01-OVERVIEW.md](./01-OVERVIEW.md) **默认 Push 规则** 转为 JS 值 |
-| **`ref`/`in`/`out T`** | **先解引用**，再对 **T** 默认 Push（例：`ref int` → **number**） |
+| 非 byref | 对槽值走 [01-OVERVIEW.md](./01-OVERVIEW.md) **登记元素策略的 Push 规则** 转为 JS 值 |
+| **`ref`/`in`/`out T`** | **先解引用**，再对 **T** 按登记元素策略 Push（例：`ref int` → **number**） |
 
 ### 5.2 `zents.set_opaquevalue(opaque_handle, new_value)`
 
 | handle 指向 | 行为 |
 |-------------|------|
-| 非 byref | 按 [01-OVERVIEW.md](./01-OVERVIEW.md) **默认 Pop** 写入槽 |
-| **`ref`/`in`/`out T`** | 解引用后对 **T** 默认 Pop 写入 |
+| 非 byref | 按 [01-OVERVIEW.md](./01-OVERVIEW.md) **登记元素策略的 Pop** 写入槽 |
+| **`ref`/`in`/`out T`** | 解引用后对 **T** 按登记元素策略 Pop 写入 |
 
 ```javascript
 function OnRefInt(h) {
@@ -133,7 +133,7 @@ function OnOpaqueInt(h) {
 
 ## 7. 与 struct Handle 路径
 
-struct 默认 C#→JS by-val 在同步链内亦可能为 OpaqueValue。须 `get`/`set`、`to_user_data` 拷贝，或在 §6 允许类型上原样传回。详见 [05-STRUCT.md](./05-STRUCT.md)。
+struct 默认 C#→JS by-val 为 ByVal 值副本；显式 OpaqueValue 或 byref 才使用借用句柄。须 `get`/`set`、`to_user_data` 拷贝，或在 §6 允许类型上原样传回。详见 [05-STRUCT.md](./05-STRUCT.md)。
 
 ---
 
@@ -146,7 +146,7 @@ struct 默认 C#→JS by-val 在同步链内亦可能为 OpaqueValue。须 `get`
 | 无三表分派 | 强制经 get/set |
 | 禁止跨调用 | `generation` 拦截 use-after-return |
 | get 解 byref | `ref int` 对脚本为 `number` |
-| Pop 自动解 | 仅 struct / 托管引用 by-val；byref 一律 Opaque 路径 |
+| Pop 自动解 | 仅 struct / 托管引用 by-val；ref/in 优先兼容 Opaque，out 无输入 |
 
 ---
 

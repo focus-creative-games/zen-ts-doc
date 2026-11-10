@@ -1,96 +1,36 @@
 ---
 sidebar_position: 14
-title: 数组
-description: 一维 / 多维数组的创建、索引、to_array 与 to_bytes。
+title: "Arrays and bytes"
 ---
 
-# 数组
+# Arrays and bytes
 
-通过 `zents` 创建 **szarray**（`T[]`）与 **mdarray**，在 JS 中按 C# 语义访问。权威：[数组 Marshal](/docs/spec/marshal/07-ARRAY/)、[类型系统 §7](/docs/spec/02-TYPE-SYSTEM/)、[05-LIB](/docs/spec/05-LIB/)。泛型集合（`List<T>` 等）见 [泛型](/docs/guides/generics/)。
-
-数组实例为 **ByObj exotic**（Registry + GC root）。元素读写经 **`arr.get` / `arr.set`** 与 **`arr.length`**（**不**实现整数键 `arr[i]`）。
-
-## 一维数组 `T[]`
+CLR arrays default to identity-preserving wrappers, not JS Arrays. SZArrays and multidimensional arrays use CLR indices.
 
 ```javascript
-// 方式 A：元素类型 + 长度
-const arr = zents.new_szarray_by_element_type(zents.types.int32, 4);
-
-// 方式 B：先构造数组类型
-const IntArray = zents.make_szarray_type(zents.types.int32);
-const arr2 = zents.new_szarray_by_szarray_type(IntArray, 4);
-
-arr.set(0, 10);      // 0 基，与 C# 一致
-arr.set(1, 20);
-console.log(arr.get(0));
-console.log(arr.length);
+const values = zents.new_szarray_by_element_type(zents.types.int32, 3);
+values.set(0, 10);
+values.set(1, 20);
+console.log(values.length, values.get(0));
+const copy = zents.to_array(values);
 ```
 
-引用类型元素可为 `null`。越界与 C# 相同 → `throw Error`。
+Use get/set rather than integer properties. to_array copies to a zero-based JS Array; modifying it does not update the CLR array.
 
-## JS → C#（szarray 形参）
+## Inputs
 
-| 实参形态 | 行为 |
-|---------|------|
-| 数组 ByObj exotic | 类型须匹配目标 `T[]` |
-| **JS `Array`** | 索引 `0..n-1` **连续、无 holes** → 构造 `T[n]` |
-| `null` | `null` |
-| `undefined`（必选） | **throw** `zents: argument missing` |
+Ordinary T[] parameters accept compatible wrappers, null, or dense JS Arrays with convertible elements. Array-like objects are not Arrays. Nested JS Arrays do not automatically become multidimensional CLR arrays. Present undefined elements follow element-slot rules; holes are rejected.
 
-```javascript
-Demo.Process(arr);           // exotic
-Demo.Process([1, 2, 3]);     // → int[3]
-Demo.Process([]);            // → int[0]
-Demo.Process(null);
-```
+`zents.new_mdarray_by_spec(elementType, lowbounds, sizes)` creates multidimensional arrays. Indices respect each CLR lower bound; length is the total element count.
 
-稀疏数组 / 类数组 plain object → **throw**。`params T[]` 亦为 **单实参槽**，**不**多实参隐式收集。
+## Bytes
 
-## 与 JS Array / 字节互转
+Default byte[] is a wrapper. `JsMarshalType.Bytes` selects copied Uint8Array in both directions, not UTF-8/binary strings or shared WASM storage.
 
-```javascript
-const t = zents.to_array(arr);   // JS Array，0 基；t[i] ↔ arr.get(i)
+to_bytes copies raw storage from accepted blittable CLR arrays, including supported multidimensional arrays. It rejects bool, char, references, and structs containing references. Layout depends on type, endianness, and ABI; do not treat it as a portable wire format.
 
-// blittable 元素 → 原始字节拷贝（Uint8Array 或 binary string，以实现为准）
-const bytes = zents.to_bytes(floatArr);
-```
+## params and byref
 
-`to_bytes` 要求元素 blittable（基元或无引用字段的 struct）；**不接受** `bool[]` / `char[]` / 含引用字段。细则见 [05-LIB](/docs/spec/05-LIB/)。
+Ordinary methods/constructors support expanded params elements or one compatible CLR array wrapper. Usually spread a JS Array explicitly; delegate/GetFunction bridges do not expand params.
 
-## 多维数组
-
-```javascript
-const IntMatrix = zents.make_mdarray_type(zents.types.int32, 2);
-const matrix = zents.new_mdarray_by_mdarray_type(
-  IntMatrix,
-  [0, 0],    // lowbounds
-  [3, 4]     // sizes
-);
-// mdarray：JS→C# 仅接受 exotic / null，不接受 JS Array
-// 用 get/set / GetLength 等；arr.length 为各维长度之积
-```
-
-## typeArg
-
-`zents.types.int32`、`zents.get_type_from_name("System.Int32")`、已解析类型对象、`make_*_type` 返回值均可作为元素类型实参。更多见 [zents 标准库](/docs/guides/zents-lib/)。
-
-## `byte[]` 与 Bytes
-
-默认同 szarray。若需 octet ↔ JS `string`，标 `[JsMarshalAs(Bytes)]`（见 [JsMarshalAs](/docs/guides/js-marshal-as/)）。
-
-## 常见错误
-
-| 现象 | 处理 |
-|------|------|
-| `arr[0]` 无效 | 使用 `get` / `set` |
-| 数组越界 | 使用 `0 .. Length-1` |
-| 稀疏 Array 传入 | 填满索引；无 holes |
-| mdarray 传 JS Array | 只传 exotic |
-| `to_bytes` 失败 | 元素非 blittable |
-
-## 相关文档
-
-- [数组 Marshal](/docs/spec/marshal/07-ARRAY/)
-- [zents 库规范 · 数组](/docs/spec/05-LIB/)
-- [泛型](/docs/guides/generics/)
-- [JsMarshalAs](/docs/guides/js-marshal-as/)
+ref/in consume input; out does not. Only out values enter the result tuple. In-place element changes are visible, but ref reassignment does not rebind a JS local. See the [array specification](../spec/marshal/07-ARRAY.md).
